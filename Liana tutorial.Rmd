@@ -1,0 +1,112 @@
+---
+title: "Liana"
+output: html_document
+date: "2026-05-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(liana)
+```
+```{r}
+show_resources()
+```
+Ligand receptor database: which ligand-receptor pairs can be recognize
+```{r}
+show_methods()
+```
+Scoring method: Whether specific ligand-receptor pairs are significant.
+
+```{r}
+liana_path <- system.file(package = "liana")
+
+testdata <- readRDS(
+  file.path(liana_path, "testdata", "input", "testdata.rds")
+)
+testdata %>% dplyr::glimpse()
+```
+Loading small example dataset. 90 cells, three cell types.
+
+```{r}
+# Run liana
+liana_test <- liana_wrap(testdata)
+# Liana returns a list of results, each element of which corresponds to a method
+liana_test %>% dplyr::glimpse()
+```
+Five scoring method. 
+Source: Source cell type, expressing ligand
+Target: Target cell type, expressing receptor
+Ligand
+Receptor
+ligand.prop: Proportion of cells expressing this ligand
+receptor.prop: Proportion of cells expressing this receptor
+ligand.expr:Average expression of ligand in the cell type
+receptor.expr:Average expression of receptor in the cell type
+Different scoring method will have different result.
+
+```{r}
+# We can aggregate these results into a tibble with consensus ranks
+liana_test <- liana_test %>%
+  liana_aggregate()
+dplyr::glimpse(liana_test)
+```
+COmbine result from different scoring method to get a consensus result. 
+The lower the aggregate_rank and mean_rank, the stronger the interaction. 
+
+```{r}
+liana_test %>%
+  liana_dotplot(source_groups = c("B"),
+                target_groups = c("NK", "CD8 T", "B"),
+                ntop = 20)
+```
+Top 20 interactions listed on y-axis. From B cell to B, CD8 T, and NK cells.
+Specificity: Is this interaction only in this pair of cell types?
+
+```{r}
+liana_trunc <- liana_test %>%
+   # only keep interactions concordant between methods
+  filter(aggregate_rank <= 0.01) # note that these pvals are already corrected
+
+heat_freq(liana_trunc)
+```
+Count the number of interaction
+
+```{r}
+# Run liana re-implementations with the CellPhoneDB resource
+complex_test <- liana_wrap(testdata,
+                           method = c('natmi', 'sca', 'logfc'),
+                           resource = c('CellPhoneDB'))
+#> Warning in exec(output, ...): 3465 genes and/or 0 cells were removed as they had
+#> no counts!
+
+complex_test %>% liana_aggregate()
+```
+
+Liana can also deal with ligand-receptor complex with multiple subunit
+
+```{r}
+# define geometric mean
+geometric_mean <- function(vec){exp(mean(log(vec)))}
+
+# Overwrite default parameters by providing a list of parameters
+liana_test <- liana_wrap(testdata,
+                         method = c('cellphonedb', 'sca'),
+                         resource = 'Consensus',
+                         permutation.params = 
+                           list(
+                             nperms = 10 # here we run cpdb it only with 10 permutations
+                             ),
+                         complex_policy="geometric_mean"
+                         )
+#> Warning in exec(output, ...): 3465 genes and/or 0 cells were removed as they had
+#> no counts!
+
+# This returns a list of results for each method
+liana_test %>% dplyr::glimpse()
+```
+We can modify parameters of liana, such as nperms to increase permutations. Here we use 10 only because we are doing a tuturial so we want to save time.

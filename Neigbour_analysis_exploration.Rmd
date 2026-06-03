@@ -1,0 +1,983 @@
+---
+title: "Spatial transcriptomics: Xenium data - neighbourhood analysis"
+author:
+- name: Zack Guo
+  affiliation: UCL Institute of Child Health
+  email: wegmzgu@ucl.ac.uk
+date: "`r format(Sys.time(), '%B %e, %Y')`"
+output:
+  html_document:
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: '5'
+    df_print: paged
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+We have performed a Xenium experiment profiling a tissue called "Myometrium' where we can distinguish two different regions: the decidua and muscle (also region2: Myometrium_decidua and Myometrium_muscle) 
+
+We have also annotated cell types at two levels of resolution. This object have two important cell types at level 2: endothelial EVTs (eEVT) and Endothelial. 
+
+We would like to quantify the neighbourhood preference of eEVT to endothelial and viceversa. Recall there are several ways to calculate neighbourhood preference. 
+
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library(Matrix)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(knitr)
+library(ggplot2)
+library(RANN)       # nn2() - rapid nearest-neighbour computation
+library(patchwork)
+```
+
+# The object
+
+```{r}
+obj_control_fvb <- readRDS(file = "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FVB_Myometrium.rds")
+obj_control_fvb
+```
+
+```{r}
+head(obj_control_fvb@meta.data)
+```
+Meta table
+
+```{r}
+# How many cells are per region?
+table(obj_control_fvb@meta.data$regions)
+```
+```{r}
+# How many cell types at level 2 are in this object?
+table(obj_control_fvb@meta.data$CellTypeManual.l2)
+```
+
+```{r}
+# How any cells per region are in this object?
+table(obj_control_fvb@meta.data$CellTypeManual.l2, obj_control_fvb@meta.data$regions )
+```
+
+# **Tasks**
+Modify the code above to output the nearests neighbour per region (decidua and myometrium). We would like to make a plot per region and compare neighborhoods.
+
+1) Explore the function nn2: We use k=2, can you extract and plot the Euclidean distances and visualise the results on a plot? 
+2) Is this a non-directional or directional neighbourhood? 
+3) Using k=2, try two normalisations: 1) Total and 2) Conditional and make a plot of these per region (perhaps a heatmap)
+4) We would like to know how the results change depending on the size of the neighbourhood. Try different values of k (for instance, k=3 and k=10). Hint: make a function that takes k and outputs a dataframe you use to make a plot.
+
+```{r, eval=FALSE}
+# # Use ? to check a function.
+ ?nn2
+# #Function nn2:
+# It uses a kd-tree to find the p number of nearest neighbors for each point in the input/output dataset. The advantage of kd-tree is that it runs in O(MlogM) time.
+# 
+# The kd-tree method first organises spatial points into a tree structure by recursively splitting the dataset along coordinate axes, such as x and y in two-dimensional space. At each split, a median point is selected as a node, with points on one side placed in the left branch and points on the other side placed in the right branch. During nearest-neighbour search, a query point is compared through this tree structure, allowing the algorithm to ignore regions that are unlikely to contain closer points and therefore search more efficiently.Therefore, it saves time because there is no need to calculating distances between the query point and all other points in the dataset.
+# 
+# Usage:
+# nn2(
+#   data,
+#   query = data,
+#   k = min(10, nrow(data)),
+#   treetype = c("kd", "bd"),
+#   searchtype = c("standard", "priority", "radius"),
+#   radius = 0,
+#   eps = 0
+# )
+# 
+# Argument: 
+# 
+# data:It means all data points we want to use for finding nearest neighbors. In this analysis, it should be all cells(their coordinates). It should be a M*d data.frame or matrix.
+# For example,
+#       x   y
+# 1     2   6
+# 2     3   1
+# 3     5   4
+# 4     8   7
+# 5    10   2
+# 6    13   3
+# where M=6 and d=2.
+# 
+# query:It means the set of data points that we want to find nearest neighbors for. It should be a N*d matrix, where d should be equal to d in data. In this case, query=data because we want to find neighbors for all cells in the dataset.
+# 
+# k:The maximum number of nearest neighbours to compute.
+
+#Tree type: Can be kd-tree or bd-tree. I just explained kd tree and that's what we are going to use.
+
+#Searchtype:Priority means starting from the nearest area in the kd-tree. Here we should use standard.
+
+#Radius: Only for searchtype="radius". 
+
+#eps=Error bound.The percentage of error allowed when searching for nearest neighbors. This is useful for very large dataset. We should use eps=0 here.
+
+#Output:
+#nn.idx: example
+#       [,1] [,2] [,3]
+# [1,]    1    3    5
+# [2,]    2    4    1
+# 
+# nn.dists: example
+#       [,1] [,2] [,3]
+# [1,] 0.00 1.41 2.50
+# [2,] 0.00 1.00 3.20
+```
+Function explanation
+```{r}
+# Make a simple dataframe from metadata
+df_control_fvb <- obj_control_fvb@meta.data %>%
+  select(
+    cell_id_donor,
+    regions,
+    centroid_X_1,
+    centroid_X_2,
+    CellTypeManual.l2
+  )
+
+target_cell_types <- c("Endothelial", "eEVT")
+target_regions <- c("decidua", "muscle")
+coordinate_columns <- c("centroid_X_1", "centroid_X_2")
+
+make_pair_label <- function(query_cell_type, neighbour_cell_type) {
+  paste(query_cell_type, "->", neighbour_cell_type)
+}
+
+build_knn_table <- function(cell_metadata,
+                            n_neighbours = 1,
+                            group_columns = NULL,
+                            coordinate_columns = c("centroid_X_1", "centroid_X_2")) {
+  required_columns <- c(
+    "cell_id_donor",
+    "regions",
+    coordinate_columns,
+    "CellTypeManual.l2"
+  )
+  missing_columns <- setdiff(required_columns, names(cell_metadata))
+  
+  if (length(missing_columns) > 0) {
+    stop("Missing required columns: ", paste(missing_columns, collapse = ", "))
+  }
+  
+  cell_metadata <- cell_metadata %>%
+    filter(
+      !is.na(.data[[coordinate_columns[1]]]),
+      !is.na(.data[[coordinate_columns[2]]])
+    )
+  
+  if (is.null(group_columns)) {
+    grouped_cells <- list(all_cells = cell_metadata)
+  } else {
+    split_key <- do.call(
+      interaction,
+      c(as.list(cell_metadata[group_columns]), list(drop = TRUE, sep = "__"))
+    )
+    grouped_cells <- split(
+      cell_metadata,
+      split_key
+    )
+  }
+  
+  lapply(grouped_cells, function(group_df) {
+    if (nrow(group_df) <= 1) {
+      return(tibble())
+    }
+    
+    k_search <- min(n_neighbours + 1, nrow(group_df))
+    coords <- as.matrix(group_df[, coordinate_columns])
+    nn <- nn2(coords, k = k_search)
+    neighbour_columns <- seq_len(k_search)[-1]
+    
+    lapply(neighbour_columns, function(neighbour_column) {
+      nearest_idx <- nn$nn.idx[, neighbour_column]
+      
+      tibble(
+        cell_id = group_df$cell_id_donor,
+        cell_region = group_df$regions,
+        cell_type = group_df$CellTypeManual.l2,
+        neighbour_rank = neighbour_column - 1,
+        nearest_cell_id = group_df$cell_id_donor[nearest_idx],
+        nearest_cell_region = group_df$regions[nearest_idx],
+        nearest_cell_type = group_df$CellTypeManual.l2[nearest_idx],
+        distance = nn$nn.dists[, neighbour_column]
+      )
+    }) %>%
+      bind_rows()
+  }) %>%
+    bind_rows()
+}
+
+summarise_neighbour_pairs <- function(neighbour_table,
+                                      normalisation = c("conditional", "total"),
+                                      cell_types = target_cell_types,
+                                      regions = target_regions) {
+  normalisation <- match.arg(normalisation)
+  
+  pair_counts <- neighbour_table %>%
+    filter(
+      cell_region %in% regions,
+      cell_type %in% cell_types,
+      nearest_cell_type %in% cell_types
+    ) %>%
+    count(cell_region, cell_type, nearest_cell_type, name = "count") %>%
+    complete(
+      cell_region = regions,
+      cell_type = cell_types,
+      nearest_cell_type = cell_types,
+      fill = list(count = 0)
+    )
+  
+  if (normalisation == "conditional") {
+    pair_counts <- pair_counts %>%
+      group_by(cell_region, cell_type)
+  } else {
+    pair_counts <- pair_counts %>%
+      group_by(cell_region)
+  }
+  
+  pair_counts %>%
+    mutate(
+      total_count = sum(count),
+      proportion = if_else(total_count > 0, count / total_count, NA_real_),
+      proportion_label = if_else(
+        is.na(proportion),
+        "NA",
+        paste0(round(proportion * 100, 1), "%")
+      ),
+      normalisation = normalisation
+    ) %>%
+    ungroup()
+}
+
+plot_neighbour_heatmap <- function(pair_summary, plot_title) {
+  ggplot(pair_summary, aes(
+    x = nearest_cell_type,
+    y = cell_type,
+    fill = proportion
+  )) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = proportion_label), size = 5) +
+    facet_wrap(~ cell_region) +
+    scale_fill_viridis_c(limits = c(0, 1), na.value = "grey90") +
+    theme_classic() +
+    labs(
+      title = plot_title,
+      x = "Nearest neighbour cell type",
+      y = "Query cell type",
+      fill = "Proportion"
+    )
+}
+
+plot_neighbour_distances <- function(neighbour_table, cell_types = target_cell_types) {
+  distance_table <- neighbour_table %>%
+    filter(
+      cell_type %in% cell_types,
+      nearest_cell_type %in% cell_types
+    ) %>%
+    mutate(
+      pair = make_pair_label(cell_type, nearest_cell_type),
+      pair = factor(
+        pair,
+        levels = make_pair_label(
+          rep(cell_types, each = length(cell_types)),
+          rep(cell_types, times = length(cell_types))
+        )
+      )
+    )
+  
+  ymax <- quantile(distance_table$distance, 0.99, na.rm = TRUE)
+  
+  ggplot(distance_table, aes(x = pair, y = distance, fill = pair)) +
+    geom_boxplot(outlier.alpha = 0.15) +
+    facet_wrap(~ cell_region) +
+    coord_cartesian(ylim = c(0, ymax)) +
+    theme_classic() +
+    labs(
+      title = "Nearest-neighbour distance by cell-type pair and region",
+      x = "Cell-type pair",
+      y = "Euclidean distance"
+    ) +
+    theme(
+      legend.position = "none",
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+}
+
+# Spatial plot coloured by cell type
+plot_tissue_celltype <- ggplot(
+  df_control_fvb,
+  aes(x = centroid_X_1, y = centroid_X_2, color = CellTypeManual.l2)
+) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  coord_fixed() +
+  theme_classic() +
+  labs(
+    title = "Control FVB:Spatial distribution of eEVT and Endothelial cells",
+    x = "X coordinate",
+    y = "Y coordinate",
+    color = "Cell type"
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 3, alpha = 1)
+    )
+  )
+
+plot_tissue_celltype
+```
+Visualization not by region
+```{r}
+# Define plotting groups first
+data_control_region <- df_control_fvb %>%
+  mutate(
+    plot_group = case_when(
+      CellTypeManual.l2 == "Endothelial" & regions == "decidua" ~ "Endothelial_decidua",
+      CellTypeManual.l2 == "Endothelial" & regions == "muscle" ~ "Endothelial_muscle",
+      CellTypeManual.l2 == "eEVT" ~ "eEVT",
+      TRUE ~ "Other"
+    )
+  )
+
+# Visualization of endothelial cells in muscle and decidua regions
+ggplot(data_control_region, aes(x = centroid_X_1, y = centroid_X_2, color = plot_group)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  coord_fixed() +
+  theme_classic() +
+  scale_color_manual(
+    values = c(
+      "Endothelial_decidua" = "blue",
+      "Endothelial_muscle" = "cyan4",
+      "eEVT" = "red",
+      "Other" = "grey85"
+    )
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 3, alpha = 1)
+    )
+  ) +
+  labs(
+    title = "Spatial distribution of eEVT and Endothelial cells by region",
+    x = "X coordinate",
+    y = "Y coordinate",
+    color = "Group"
+  )
+```
+Visualization by region
+```{r}
+# Build the nearest-neighbour table within each tissue region.
+nn_table <- build_knn_table(
+  cell_metadata = df_control_fvb,
+  n_neighbours = 1,
+  group_columns = "regions",
+  coordinate_columns = coordinate_columns
+)
+
+head(nn_table)
+```
+
+```{r}
+nn_prop_table_region <- summarise_neighbour_pairs(
+  neighbour_table = nn_table,
+  normalisation = "conditional"
+)
+
+p_control_heatmap_k1 <- plot_neighbour_heatmap(
+  nn_prop_table_region,
+  plot_title = "Control FVB"
+)
+p_control_heatmap_k1
+```
+
+```{r}
+nn_summary_table <- nn_table %>%
+  filter(
+    cell_type %in% target_cell_types,
+    nearest_cell_type %in% target_cell_types
+  ) %>%
+  group_by(cell_region, cell_type, nearest_cell_type) %>%
+  summarise(
+    count = n(),
+    mean_distance = mean(distance, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  complete(
+    cell_region = target_regions,
+    cell_type = target_cell_types,
+    nearest_cell_type = target_cell_types,
+    fill = list(
+      count = 0,
+      mean_distance = NA
+    )
+  ) %>%
+  group_by(cell_region, cell_type) %>%
+  mutate(
+    total_count = sum(count),
+    proportion = if_else(total_count > 0, count / total_count, NA_real_)
+  ) %>%
+  ungroup()
+
+nn_summary_table
+```
+```{r}
+plot_neighbour_distances(nn_table)
+```
+```{r}
+nn_table_plot <- nn_table %>%
+  filter(
+    cell_type %in% target_cell_types,
+    nearest_cell_type %in% target_cell_types
+  ) %>%
+  mutate(
+    pair = make_pair_label(cell_type, nearest_cell_type),
+    pair = factor(
+      pair,
+      levels = make_pair_label(
+        rep(target_cell_types, each = length(target_cell_types)),
+        rep(target_cell_types, times = length(target_cell_types))
+      )
+    )
+  )
+
+ymax <- quantile(nn_table_plot$distance, 0.99, na.rm = TRUE)
+```
+```{r}
+ggplot(nn_table_plot, aes(x = pair, y = distance, fill = pair)) +
+  geom_violin(trim = FALSE, alpha = 0.7) +
+  facet_wrap(~ cell_region) +
+  coord_cartesian(ylim = c(0, ymax)) +
+  theme_classic() +
+  labs(
+    title = "Nearest-neighbour distance distribution by cell-type pair and region",
+    x = "Cell-type pair",
+    y = "Euclidean distance"
+  ) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+
+
+```{r}
+make_neighbour_proportion <- function(cell_metadata, n_neighbours = 10) {
+  neighbour_table <- build_knn_table(
+    cell_metadata = cell_metadata,
+    n_neighbours = n_neighbours,
+    group_columns = "regions",
+    coordinate_columns = coordinate_columns
+  )
+  
+  pair_table <- summarise_neighbour_pairs(
+    neighbour_table = neighbour_table,
+    normalisation = "conditional"
+  )
+  
+  heatmap <- plot_neighbour_heatmap(
+    pair_table,
+    plot_title = paste0(
+      "Neighbour cell-type proportion using ",
+      n_neighbours,
+      " nearest neighbours"
+    )
+  )
+  
+  list(
+    neighbour_table = neighbour_table,
+    pair_table = pair_table,
+    heatmap = heatmap
+  )
+}
+```
+
+```{r}
+k_values <- c(10, 30, 50, 100)
+
+neighbour_results_by_k <- lapply(k_values, function(k) {
+  make_neighbour_proportion(df_control_fvb, n_neighbours = k)
+})
+names(neighbour_results_by_k) <- paste0("k", k_values)
+
+head(neighbour_results_by_k$k10$neighbour_table)
+
+for (result_name in names(neighbour_results_by_k)) {
+  print(neighbour_results_by_k[[result_name]]$heatmap)
+}
+```
+Conclusion:
+1. The spatial relationship between eEVT and endothelial cells is directional in both myometrium decidua and myometrium muscle regions. eEVT cells have stronger NEP towards endothelial cells than vice versa.
+2.The distance between endo-endo pairs is the shortest, followed by eEVT-eEVT, endo-eEVT, eEVT-endo. Cells show clustering within cell type.
+3.The endo-eEVT mixing is stronger in decidua than in muscle from k=2 to k=30
+4.As k is increasing, the NEP between the two cell types increases
+
+```{r}
+k_distance_values <- c(2, 10, 30, 50, 100)
+
+k_distance_table <- lapply(k_distance_values, function(k) {
+  build_knn_table(
+    cell_metadata = df_control_fvb,
+    n_neighbours = k,
+    group_columns = "regions",
+    coordinate_columns = coordinate_columns
+  ) %>%
+    filter(neighbour_rank == k) %>%
+    summarise(
+      k = k,
+      mean_last_neighbour_distance = mean(distance, na.rm = TRUE),
+      .groups = "drop"
+    )
+}) %>%
+  bind_rows()
+
+k_distance_table
+```
+
+```{r}
+library("coziR")
+cozi_input <- df_control_fvb %>%
+  filter(
+    !is.na(.data[[coordinate_columns[1]]]),
+    !is.na(.data[[coordinate_columns[2]]])
+  )
+
+coords <- as.matrix(cozi_input[, coordinate_columns])
+labels <- cozi_input$CellTypeManual.l2
+
+res_all <- run_cozi(
+  coords = coords,
+  labels = labels,
+  nbh_def = "knn",
+  n_neighbors = 5L,
+  n_permutations = 300L,
+  random_state = 123
+)
+
+res_all$cond_ratio
+res_all$zscore
+```
+
+CCR: Most eEVT has a neighbouring endothelial cell, while only a small fraction of endothelial cells have eEVT neighbours. This suggests directionality.
+Z score: 60.7 might suggest a strong spatial pattern.
+
+Disease dataset：
+
+```{r}
+obj_disease_fam <- readRDS(file = "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FAM_Myometrium.rds")
+head(obj_disease_fam@meta.data)
+```
+```{r}
+table(obj_disease_fam@meta.data$regions)
+```
+How many cells are per region
+```{r}
+table(obj_disease_fam@meta.data$CellTypeManual.l2, obj_disease_fam@meta.data$regions)
+```
+```{r}
+table(obj_disease_fam@meta.data$CellTypeManual.l2, obj_disease_fam@meta.data$regions)
+```
+```{r}
+df_disease_fam <- obj_disease_fam@meta.data %>%
+  select(
+    cell_id_donor,
+    regions,
+    centroid_X_1,
+    centroid_X_2,
+    CellTypeManual.l2
+  )
+```
+
+Visualization not by region
+
+```{r}
+# Define plotting groups first
+data_disease_region <- df_disease_fam %>%
+  mutate(
+    plot_group = case_when(
+      CellTypeManual.l2 == "Endothelial" & regions == "decidua" ~ "Endothelial_decidua",
+      CellTypeManual.l2 == "Endothelial" & regions == "muscle" ~ "Endothelial_muscle",
+      CellTypeManual.l2 == "eEVT" ~ "eEVT",
+      TRUE ~ "Other"
+    )
+  )
+# Visualization of endothelial cells in muscle and decidua regions
+ggplot(data_disease_region, aes(x = centroid_X_1, y = centroid_X_2, color = plot_group)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  coord_fixed() +
+  theme_classic() +
+  scale_color_manual(
+    values = c(
+      "Endothelial_decidua" = "blue",
+      "Endothelial_muscle" = "cyan4",
+      "eEVT" = "red",
+      "Other" = "grey85"
+    )
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 3, alpha = 1)
+    )
+  ) +
+  labs(
+    title = "Disease FAM: spatial distribution of eEVT and Endothelial cells by region",
+    x = "X coordinate",
+    y = "Y coordinate",
+    color = "Group"
+  )
+```
+Visualization by region
+```{r}
+# Build the nearest-neighbour table within each tissue region.
+nn_table_disease_fam <- build_knn_table(
+  cell_metadata = df_disease_fam,
+  n_neighbours = 1,
+  group_columns = "regions",
+  coordinate_columns = coordinate_columns
+)
+head(nn_table_disease_fam)
+```
+
+```{r}
+nn_prop_table_region_disease_fam <- summarise_neighbour_pairs(
+  neighbour_table = nn_table_disease_fam,
+  normalisation = "conditional"
+)
+p_disease_heatmap_k1 <- plot_neighbour_heatmap(
+  nn_prop_table_region_disease_fam,
+  plot_title = "Disease FAM"
+)
+p_disease_heatmap_k1
+```
+```{r}
+nn_summary_table_disease_fam <- nn_table_disease_fam %>%
+  filter(
+    cell_type %in% target_cell_types,
+    nearest_cell_type %in% target_cell_types
+  ) %>%
+  group_by(cell_region, cell_type, nearest_cell_type) %>%
+  summarise(
+    count = n(),
+    mean_distance = mean(distance, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  complete(
+    cell_region = target_regions,
+    cell_type = target_cell_types,
+    nearest_cell_type = target_cell_types,
+    fill = list(
+      count = 0,
+      mean_distance = NA
+    )
+  ) %>%
+  group_by(cell_region, cell_type) %>%
+  mutate(
+    total_count = sum(count),
+    proportion = if_else(total_count > 0, count / total_count, NA_real_)
+  ) %>%
+  ungroup()
+nn_summary_table_disease_fam
+```
+```{r}
+plot_neighbour_distances(nn_table_disease_fam)
+```
+```{r}
+nn_table_plot_disease_fam <- nn_table_disease_fam %>%
+  filter(
+    cell_type %in% target_cell_types,
+    nearest_cell_type %in% target_cell_types
+  ) %>%
+  mutate(
+    pair = make_pair_label(cell_type, nearest_cell_type),
+    pair = factor(
+      pair,
+      levels = make_pair_label(
+        rep(target_cell_types, each = length(target_cell_types)),
+        rep(target_cell_types, times = length(target_cell_types))
+      )
+    )
+  )
+ymax_disease_fam <- quantile(nn_table_plot_disease_fam$distance, 0.99, na.rm = TRUE)
+```
+
+```{r}
+ggplot(nn_table_plot_disease_fam, aes(x = pair, y = distance, fill = pair)) +
+  geom_violin(trim = FALSE, alpha = 0.7) +
+  facet_wrap(~ cell_region) +
+  coord_cartesian(ylim = c(0, ymax_disease_fam)) +
+  theme_classic() +
+  labs(
+    title = "Disease FAM: nearest-neighbour distance distribution by cell-type pair and region",
+    x = "Cell-type pair",
+    y = "Euclidean distance"
+  ) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+```{r}
+neighbour_results_by_k_disease_fam <- lapply(k_values, function(k) {
+  make_neighbour_proportion(df_disease_fam, n_neighbours = k)
+})
+names(neighbour_results_by_k_disease_fam) <- paste0("k", k_values)
+
+head(neighbour_results_by_k_disease_fam$k10$neighbour_table)
+
+for (result_name in names(neighbour_results_by_k_disease_fam)) {
+  print(neighbour_results_by_k_disease_fam[[result_name]]$heatmap)
+}
+```
+```{r}
+k_distance_values <- c(2, 10, 30, 50, 100)
+
+k_distance_table_disease_fam <- lapply(k_distance_values, function(k) {
+  build_knn_table(
+    cell_metadata = df_disease_fam,
+    n_neighbours = k,
+    group_columns = "regions",
+    coordinate_columns = coordinate_columns
+  ) %>%
+    filter(neighbour_rank == k) %>%
+    summarise(
+      k = k,
+      mean_last_neighbour_distance = mean(distance, na.rm = TRUE),
+      .groups = "drop"
+    )
+}) %>%
+  bind_rows()
+
+k_distance_table_disease_fam
+```
+```{r}
+cozi_input_disease_fam <- df_disease_fam %>%
+  filter(
+    !is.na(.data[[coordinate_columns[1]]]),
+    !is.na(.data[[coordinate_columns[2]]])
+  )
+
+coords_disease_fam <- as.matrix(cozi_input_disease_fam[, coordinate_columns])
+labels_disease_fam <- cozi_input_disease_fam$CellTypeManual.l2
+
+res_disease_fam <- run_cozi(
+  coords = coords_disease_fam,
+  labels = labels_disease_fam,
+  nbh_def = "knn",
+  n_neighbors = 5L,
+  n_permutations = 300L,
+  random_state = 123
+)
+
+res_disease_fam$cond_ratio
+res_disease_fam$zscore
+```
+```{r}
+# Count eEVT and Endothelial cells from your existing Seurat objects
+cell_counts <- bind_rows(
+  as.data.frame(table(
+    obj_control_fvb@meta.data$CellTypeManual.l2,
+    obj_control_fvb@meta.data$regions
+  )) %>%
+    mutate(sample_group = "control"),
+  
+  as.data.frame(table(
+    obj_disease_fam@meta.data$CellTypeManual.l2,
+    obj_disease_fam@meta.data$regions
+  )) %>%
+    mutate(sample_group = "disease")
+) %>%
+  rename(
+    cell_type = Var1,
+    region = Var2,
+    n = Freq
+  ) %>%
+  filter(
+    cell_type %in% c("eEVT", "Endothelial"),
+    region %in% c("decidua", "muscle")
+  )
+
+# Make eEVT proportion table with division shown
+Count_disease_versus_control <- cell_counts %>%
+  pivot_wider(
+    names_from = cell_type,
+    values_from = n,
+    values_fill = 0
+  ) %>%
+  mutate(
+    total = eEVT + Endothelial,
+    percent = eEVT / total * 100,
+    percent_label = ifelse(
+      percent < 1,
+      sprintf("%.2f%%", percent),
+      sprintf("%.1f%%", percent)
+    ),
+    calculation = paste0(eEVT, " / ", total, " = ", percent_label)
+  ) %>%
+  select(sample_group, region, calculation) %>%
+  pivot_wider(
+    names_from = sample_group,
+    values_from = calculation,
+    names_glue = "{sample_group} eEVT proportion"
+  ) %>%
+  arrange(region)
+Count_disease_versus_control
+```
+1.Number and percentage of eEVT significantly decreases, particularly in the muscle region. This suggests reduced invasion(possibly impaired remodelling?)
+
+```{r}
+
+p_control_heatmap_k1
+p_disease_heatmap_k1
+```
+2.The directionality is more extreme. The directionality from eEVT to endothelial cells still exists, but directionality in another direction is completely lost.
+
+```{r}
+for (result_name in names(neighbour_results_by_k_disease_fam)) {
+  print(neighbour_results_by_k_disease_fam[[result_name]]$heatmap)
+}
+```
+3. As k increases, the pairwise NEP seems to be also increasing. However, I don't think this is biologically meaningful, as when k increases, the neibors of eEVT can only be endothelial cells since there are only 15 of them.
+
+```{r}
+make_distance_summary <- function(nn_table, dataset_name) {
+  
+  nn_table %>%
+    filter(
+      cell_region %in% c("decidua", "muscle"),
+      cell_type %in% c("eEVT", "Endothelial"),
+      nearest_cell_type %in% c("eEVT", "Endothelial")
+    ) %>%
+    filter(
+      (cell_type == "eEVT" & nearest_cell_type == "Endothelial") |
+        (cell_type == "Endothelial" & nearest_cell_type == "eEVT")
+    ) %>%
+    mutate(
+      dataset = dataset_name,
+      pair = paste0(cell_type, " → ", nearest_cell_type)
+    ) %>%
+    group_by(dataset, region = cell_region, pair) %>%
+    summarise(
+      n = n(),
+      mean_distance = round(mean(distance, na.rm = TRUE), 2),
+      median_distance = round(median(distance, na.rm = TRUE), 2),
+      q1 = round(quantile(distance, 0.25, na.rm = TRUE), 2),
+      q3 = round(quantile(distance, 0.75, na.rm = TRUE), 2),
+      .groups = "drop"
+    )
+}
+
+distance_summary_long <- bind_rows(
+  make_distance_summary(nn_table, "Control FVB"),
+  make_distance_summary(nn_table_disease_fam, "Disease FAM")
+)
+
+distance_summary_long
+```
+```{r}
+distance_test_data <- bind_rows(
+  nn_table %>%
+    mutate(dataset = "Control FVB"),
+  
+  nn_table_disease_fam %>%
+    mutate(dataset = "Disease FAM")
+) %>%
+  filter(
+    cell_region %in% c("decidua", "muscle"),
+    cell_type == "eEVT",
+    nearest_cell_type == "Endothelial"
+  )
+# Control FVB - decidua
+control_decidua_distance <- distance_test_data %>%
+  filter(dataset == "Control FVB", cell_region == "decidua") %>%
+  pull(distance)
+
+cat("Control FVB - decidua:\n")
+shapiro.test(control_decidua_distance)
+
+
+# Control FVB - muscle
+control_muscle_distance <- distance_test_data %>%
+  filter(dataset == "Control FVB", cell_region == "muscle") %>%
+  pull(distance)
+
+cat("\nControl FVB - muscle:\n")
+shapiro.test(control_muscle_distance)
+
+
+# Disease FAM - decidua
+disease_decidua_distance <- distance_test_data %>%
+  filter(dataset == "Disease FAM", cell_region == "decidua") %>%
+  pull(distance)
+
+cat("\nDisease FAM - decidua:\n")
+shapiro.test(disease_decidua_distance)
+
+
+# Disease FAM - muscle
+disease_muscle_distance <- distance_test_data %>%
+  filter(dataset == "Disease FAM", cell_region == "muscle") %>%
+  pull(distance)
+
+cat("\nDisease FAM - muscle:\n")
+shapiro.test(disease_muscle_distance)
+```
+
+```{r}
+# Make sure the distance table exists
+distance_test_data <- bind_rows(
+  nn_table %>%
+    mutate(dataset = "Control FVB"),
+  
+  nn_table_disease_fam %>%
+    mutate(dataset = "Disease FAM")
+) %>%
+  filter(
+    cell_region %in% c("decidua", "muscle"),
+    cell_type == "eEVT",
+    nearest_cell_type == "Endothelial"
+  )
+
+# Run Wilcoxon test
+wilcox_results <- distance_test_data %>%
+  group_by(cell_region) %>%
+  summarise(
+    control_n = sum(dataset == "Control FVB"),
+    disease_n = sum(dataset == "Disease FAM"),
+    control_median = median(distance[dataset == "Control FVB"], na.rm = TRUE),
+    disease_median = median(distance[dataset == "Disease FAM"], na.rm = TRUE),
+    p_value = wilcox.test(distance ~ dataset)$p.value,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_adj = p.adjust(p_value, method = "BH")
+  )
+
+# Print results
+wilcox_results %>%
+  select(
+    cell_region,
+    control_n,
+    disease_n,
+    control_median,
+    disease_median,
+    p_value,
+    p_adj
+  ) %>%
+  print()
+```
+
+4.I carried out a Wilcoxon rank-sum test(due to unbalanced sample size and non-normal distribution) between two sample in terms of their pairwise distances in two cell types. Overall, eEVTs in the disease sample tended to be farther from endothelial cells than in control, particularly in the decidua
+
+```{r}
+res_all$cond_ratio
+res_disease_fam$cond_ratio
+res_all$zscore
+res_disease_fam$zscore
+```
+
+5.The most substantial change occurs in CCR score from endothelial cells to eEVT. It decreases from 0.076 to 0.0084, which is a ten fold change. In addition, z-score in disease sample between eEVT to eEVT decreases from 41 to 4.33, suggesting reduced self clustering?
+
+
+

@@ -1,0 +1,244 @@
+---
+title: "Spatial Proteomics Practice"
+output: html_document
+date: "2026-05-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# load the libraries
+library(rmarkdown)
+library(reshape2) # used to change data format. As I go along the practice, I realize that the melt() function is really important because it transforms wide-format marker data into a long format, making it much easier to visualize distributions and generate plots
+library(ggplot2)   
+library(uwot) 
+```
+```{r}
+library(RANN)       # nn2() - rapid nearest-neighbour computation
+library(patchwork)  # combine plots
+```
+
+```{r}
+library(here)
+data <- read.csv(here("Data", "workshop_data.csv"))
+head(data)
+```
+In this matrix, I can see ID of cells, alongside with their X and Y-axis and surface markers.
+
+-------------------------------------------------------------------------------------------------------
+Exploratory Data Analysis:
+
+```{r}
+# view the tissue: plot the centroids of each cell
+plot_tissue <- ggplot(data, aes(CellX,CellY)) +
+  geom_point()
+plot_tissue
+```
+This is a visualization of all cells in this sample/dataset. All cells are plotted in the graph according to their X-and Y-axis.
+
+```{r}
+# Colored by CD4
+plot_tissue_CD4 <- ggplot(data, aes(x = CellX, y = CellY, color = CD4)) +
+  geom_point() + scale_color_viridis_c()
+
+#Colored by panCK
+plot_tissue_panCK <- ggplot(data, aes(x = CellX, y = CellY, color = panCK)) +
+  geom_point() + scale_color_viridis_c()
+
+
+plot_tissue_CD4+plot_tissue_panCK
+```
+I have tried to color the cells by two different colors. 
+-The first one is CD4,which is a distinct marker for T helper cells.They scatter all over the tissue.
+-The second one is panCK, which is a marker for epithelial cells. They concentrated around the hollow area(maybe vessel/duct)
+
+```{r}
+  # boxplots  3:8 so x and y axis information is not included.
+  plot1 <- ggplot(melt(data[,3:8])) +
+    geom_boxplot(aes(variable,value)) + ggtitle("Boxplot before scaling")
+  # density plots
+  plot2 <- ggplot(melt(data[,3:8])) +
+    geom_density(aes(value,fill=variable),alpha=0.5) + ggtitle("Density plot before scaling") #alpha value is for transparency
+  plot1+plot2
+```
+These data is strongly right-skewed. The majority of cells have very low number and a few cells have very large value. In addition, the mean and median for panCK and aSMA are much larger than CD4, FOXP3,CD68, and PDL-1.
+
+```{r}
+# recall the data structure. Print the head of the file:
+head(data,3)
+```
+
+```{r}
+# Use Z-score to normalised the intensity values
+data[,3:8] = scale(data[,3:8])
+
+# Print again the head of the file. Please notice the change on the values.
+head(data,3)
+```
+Here we are doing a z-score normalization.Normalisation using Z-score scaling standardises each marker to a common scale by centering values around the mean and adjusting for variability, allowing fair comparison between markers with different intensity ranges
+
+z=x-mean/standard deviation
+
+```{r}
+# Let's inspect again the boxplot and the density plots after normalisation. What do you notice?+++
+# boxplots 
+plot4 <-  ggplot(melt(data[,3:8])) +
+    geom_boxplot(aes(variable,value)) + ggtitle("Boxplot after scaling")
+# densitity plot
+plot5 <-   ggplot(melt(data[,3:8])) +
+    geom_density(aes(value,fill=variable),alpha=0.5) + ggtitle("Density plot after scaling")
+```
+
+```{r}
+plot1 + plot4 + plot2 + plot5 + plot_layout(ncol = 2)
+```
+After normalization, all markers are transformed into a comparable scale where mean is around 0.Therefore, large initial intensity differences is reduced(panCK etc), making down stream analysis such as clustering more reliable.
+
+```{r}
+set.seed(123)    # set seed for reproducibility
+
+# calculate k means - here we set k = 4. Why do you think k = 4?
+kmeans = kmeans(scale(data[,3:8]),4)
+# Let's explore the results. View centres.
+kmeans$centers
+```
+We have k=4 here because the number of cell types is 4. Four centre is randomly chosen, and cells are allocated to the centre that is nearest. The process is repeated until the result is stable.
+
+This table represent the average marker expression in each cluster.
+<0 means lower than mean. >0 means higher than average. <-1 means significantly lower. >1 means significantly higher.
+
+For example, in cluster one, panCK is expressed at higher level, while other makers are downregulated, suggesting its role of epithelial/tumor cells.
+
+```{r}
+# Check cluster sizes
+table(kmeans$cluster)
+```
+```{r}
+#  We can also visualise the relationship of markers an clusters as a heatmap
+
+plot7 <- ggplot(melt(kmeans$centers)) +
+  geom_tile(aes(Var1,Var2,fill=value)) +
+  scale_fill_gradient2(low="#0072b2",mid="white",high="#d55e00",midpoint=0) +
+  labs(x="cluster",y="marker",fill="intensity",title="heatmap of cluster centres")
+
+plot7
+```
+```{r}
+# looks like cluster 1 is Epi, 2 is Macrophage, 3 is Treg, 4 is CAF
+# Add the results from the k-mean to the 'data' 
+data$cluster = factor(kmeans$cluster,labels=c("Epi","Macrophage","Treg","CAF"))
+
+# check the data again
+head(data)
+```
+
+```{r}
+# Check the assigment of each cluster correspond to the expected cell type given the known markers
+plot6 <- ggplot(melt(data[,3:9])) +
+  geom_boxplot(aes(cluster,value, fill = cluster)) +
+  facet_wrap(~variable,scales="free") +
+  ggtitle("marker intensity by cluster")
+```
+
+```{r}
+plot6
+```
+```{r}
+# overlay cell types on the tissue
+
+plot_tissue_celltypes <- ggplot(data,aes(CellX,CellY,colour=cluster)) +
+  geom_point() + ggtitle("Tissue coloured by cell types") +
+  labs(x="x",y="y")
+
+# visualise the plots
+plot_tissue_celltypes
+```
+Nearest neibor analysis.
+```{r}
+ # For every cell, return the row indices of its nearest two neighbours. The data[,1:2] corresponds to the CellX and CellY cell coordinates.
+  nebs = nn2(data[,1:2],k=2)[[1]]
+  # discard column 1 (these will almost always be the cell itself)
+  nebs = nebs[,2]
+```
+
+```{r}
+# supply these row indices to the dataset to return the phenotypes of the neighbours stored in the column called "cluster"
+  nebs = data[nebs,"cluster"]
+  # now we make a table where the rows are the cells and the columns are the phenotypes of their nearest neighbours
+  nebs = as.matrix(table(data$cluster,nebs))
+  # convert to proportion
+  nebs = nebs/rowSums(nebs)
+  # blank out the middle diagonal (since most cells will neighbour themselves - this information is not informative)
+  diag(nebs) = NA
+  
+  print(nebs)
+```
+Find the second nearest cell to exclude the cell itself for each cluster, and convert to ratio.
+
+```{r}
+# now we can melt and plot
+plot_nn <-  ggplot(melt(nebs)) +
+    geom_tile(aes(Var1,nebs,fill=value)) +
+    scale_fill_gradient(low="white",high="red") +
+    labs(x="phenotype of cell",y="phenotype of nearest neighbour",fill="proportion",title="nearest neighbours")
+
+plot_nn
+```
+Macrophage is in close proximaty to Treg and CAF, suggesting a potential immunosuppressive tumor microenviroment that support tumor growth and stroma remodelling. CAF is closest to epithelial cells, suggesting its role for ECM remodelling and and structural enhencement.
+
+
+Change of a particular cell type density across space
+Another common task in spatial biology is to know how a particular cell type(s) abundance change as we move away from a boundary. Here we use the epithelium “Epi” as such as boundary and check the changes of the other cell types.
+```{r}
+# split data in to epithelial cells and non-epithelial cells
+  epi = data[data$cluster == "Epi",]
+  nonepi = data[data$cluster != "Epi",]
+  
+  # for every non-epithelial cell, get the distance to the nearest epithelial cell
+  dist = nn2(epi,nonepi,k = 1)
+  dist = dist[[2]]
+  
+  # add this information to the dataset to non-epithelial cells
+  data$distance_to_nearest_epi = NA
+  data$distance_to_nearest_epi[data$cluster != "Epi"] = dist
+  
+  head(data)
+```
+
+```{r}
+# boxplot of distances. What do you observe?
+ boxplot_distances <-  ggplot(data[data$cluster != "Epi", ],aes(cluster,distance_to_nearest_epi)) +
+    geom_boxplot() +
+    labs(title="epithelial proximity")
+
+ boxplot_distances 
+```
+The distance to epithelial cells within each cluster is variable.
+
+```{r}
+  # bin distances in to 5 bins by 20% each. This allows to have discrete values, perhaps easier to see a trend.
+  data$distance_to_nearest_epi = cut(data$distance_to_nearest_epi,quantile(data$distance_to_nearest_epi,seq(0,1,1/5),na.rm=T),include.lowest = T)
+  # for every cell phenotype, how many of those cells are in particular bins?
+  
+  table = as.matrix(table(data$cluster,data$distance_to_nearest_epi))
+  table  
+```
+```{r}
+# make the plot
+plot_distances <- ggplot(melt(table)) +
+    geom_point(aes(Var2,value,colour=factor(Var1))) +
+    geom_line(aes(as.numeric(Var2),value,colour=factor(Var1)))  +
+    scale_colour_manual(values = c("transparent","#7CAE00","#00BFC4","#C77CFF")) +
+    labs(x="distance from epithelium",y="number of cells",title="epithelium spatial relationships")
+
+
+plot_distances
+```
+Conclusion
+Here we have confirmed what we thought after looking at the physical tissue: different cell phenotypes have different distance relationships with tumour epithelium.
+
+1. Tregs (CD4 and FOXP3) are epithelium distal
+2. Macrophages (CD68 and PDL1) are epithelium proximal
+3. CAFs (aSMA) are epithelium adjacent
