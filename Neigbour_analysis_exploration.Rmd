@@ -53,15 +53,13 @@ Meta table
 # How many cells are per region?
 table(obj_control_fvb@meta.data$regions)
 ```
+
 ```{r}
 # How many cell types at level 2 are in this object?
 table(obj_control_fvb@meta.data$CellTypeManual.l2)
 ```
 
-```{r}
-# How any cells per region are in this object?
-table(obj_control_fvb@meta.data$CellTypeManual.l2, obj_control_fvb@meta.data$regions )
-```
+
 
 # **Tasks**
 Modify the code above to output the nearests neighbour per region (decidua and myometrium). We would like to make a plot per region and compare neighborhoods.
@@ -306,6 +304,83 @@ plot_neighbour_distances <- function(neighbour_table, cell_types = target_cell_t
     )
 }
 
+plot_cell_region_distribution <- function(cell_metadata,
+                                          plot_title = "Spatial distribution of eEVT and Endothelial cells by region",
+                                          cell_types = c("Endothelial", "eEVT"),
+                                          regions = c("decidua", "muscle"),
+                                          coordinate_columns = c("centroid_X_1", "centroid_X_2"),
+                                          cell_type_col = "CellTypeManual.l2",
+                                          region_col = "regions") {
+  
+  required_columns <- c(
+    coordinate_columns,
+    cell_type_col,
+    region_col
+  )
+  
+  missing_columns <- setdiff(required_columns, names(cell_metadata))
+  
+  if (length(missing_columns) > 0) {
+    stop("Missing required columns: ", paste(missing_columns, collapse = ", "))
+  }
+  
+  plot_data <- cell_metadata %>%
+    mutate(
+      plot_group = case_when(
+        .data[[cell_type_col]] == "Endothelial" & .data[[region_col]] == "decidua" ~ "Endothelial_decidua",
+        .data[[cell_type_col]] == "Endothelial" & .data[[region_col]] == "muscle" ~ "Endothelial_muscle",
+        .data[[cell_type_col]] == "eEVT" & .data[[region_col]] == "decidua" ~ "eEVT_decidua",
+        .data[[cell_type_col]] == "eEVT" & .data[[region_col]] == "muscle" ~ "eEVT_muscle",
+        TRUE ~ "Other"
+      ),
+      plot_group = factor(
+        plot_group,
+        levels = c(
+          "Other",
+          "Endothelial_decidua",
+          "Endothelial_muscle",
+          "eEVT_decidua",
+          "eEVT_muscle"
+        )
+      )
+    )
+  
+  ggplot(
+    plot_data,
+    aes(
+      x = .data[[coordinate_columns[1]]],
+      y = .data[[coordinate_columns[2]]],
+      color = plot_group
+    )
+  ) +
+    geom_point(size = 0.5, alpha = 0.8) +
+    coord_fixed() +
+    theme_classic() +
+    scale_color_manual(
+      values = c(
+        "Other" = "grey85",
+        "Endothelial_decidua" = "blue",
+        "Endothelial_muscle" = "cyan4",
+        "eEVT_decidua" = "red",
+        "eEVT_muscle" = "orange"
+      )
+    ) +
+    guides(
+      color = guide_legend(
+        override.aes = list(size = 3, alpha = 1)
+      )
+    ) +
+    labs(
+      title = plot_title,
+      x = "X coordinate",
+      y = "Y coordinate",
+      color = "Group"
+    )
+}
+
+```
+
+```{r}
 # Spatial plot coloured by cell type
 plot_tissue_celltype <- ggplot(
   df_control_fvb,
@@ -330,41 +405,10 @@ plot_tissue_celltype
 ```
 Visualization not by region
 ```{r}
-# Define plotting groups first
-data_control_region <- df_control_fvb %>%
-  mutate(
-    plot_group = case_when(
-      CellTypeManual.l2 == "Endothelial" & regions == "decidua" ~ "Endothelial_decidua",
-      CellTypeManual.l2 == "Endothelial" & regions == "muscle" ~ "Endothelial_muscle",
-      CellTypeManual.l2 == "eEVT" ~ "eEVT",
-      TRUE ~ "Other"
-    )
-  )
-
-# Visualization of endothelial cells in muscle and decidua regions
-ggplot(data_control_region, aes(x = centroid_X_1, y = centroid_X_2, color = plot_group)) +
-  geom_point(size = 0.5, alpha = 0.8) +
-  coord_fixed() +
-  theme_classic() +
-  scale_color_manual(
-    values = c(
-      "Endothelial_decidua" = "blue",
-      "Endothelial_muscle" = "cyan4",
-      "eEVT" = "red",
-      "Other" = "grey85"
-    )
-  ) +
-  guides(
-    color = guide_legend(
-      override.aes = list(size = 3, alpha = 1)
-    )
-  ) +
-  labs(
-    title = "Spatial distribution of eEVT and Endothelial cells by region",
-    x = "X coordinate",
-    y = "Y coordinate",
-    color = "Group"
-  )
+plot_cell_region_distribution(
+  df_control_fvb,
+  plot_title = "Control FVB: spatial distribution of eEVT and Endothelial cells by region"
+)
 ```
 Visualization by region
 ```{r}
@@ -378,6 +422,17 @@ nn_table <- build_knn_table(
 
 head(nn_table)
 ```
+```{r}
+pair_summary_total <- summarise_neighbour_pairs(
+  neighbour_table = nn_table,
+  normalisation = "total"
+)
+
+plot_neighbour_heatmap(
+  pair_summary_total,
+  plot_title = "Control FVB nearest-neighbour preference, total normalisation"
+)
+```
 
 ```{r}
 nn_prop_table_region <- summarise_neighbour_pairs(
@@ -387,7 +442,7 @@ nn_prop_table_region <- summarise_neighbour_pairs(
 
 p_control_heatmap_k1 <- plot_neighbour_heatmap(
   nn_prop_table_region,
-  plot_title = "Control FVB"
+  plot_title = "Control FVB nearest-neibour preference, conditional normalization"
 )
 p_control_heatmap_k1
 ```
@@ -547,17 +602,17 @@ cozi_input <- df_control_fvb %>%
 coords <- as.matrix(cozi_input[, coordinate_columns])
 labels <- cozi_input$CellTypeManual.l2
 
-res_all <- run_cozi(
+res_cozi_control <- run_cozi(
   coords = coords,
   labels = labels,
   nbh_def = "knn",
-  n_neighbors = 5L,
+  n_neighbors = 3L,
   n_permutations = 300L,
   random_state = 123
 )
 
-res_all$cond_ratio
-res_all$zscore
+res_cozi_control$cond_ratio
+res_cozi_control$zscore
 ```
 
 CCR: Most eEVT has a neighbouring endothelial cell, while only a small fraction of endothelial cells have eEVT neighbours. This suggests directionality.
@@ -593,40 +648,10 @@ df_disease_fam <- obj_disease_fam@meta.data %>%
 Visualization not by region
 
 ```{r}
-# Define plotting groups first
-data_disease_region <- df_disease_fam %>%
-  mutate(
-    plot_group = case_when(
-      CellTypeManual.l2 == "Endothelial" & regions == "decidua" ~ "Endothelial_decidua",
-      CellTypeManual.l2 == "Endothelial" & regions == "muscle" ~ "Endothelial_muscle",
-      CellTypeManual.l2 == "eEVT" ~ "eEVT",
-      TRUE ~ "Other"
-    )
-  )
-# Visualization of endothelial cells in muscle and decidua regions
-ggplot(data_disease_region, aes(x = centroid_X_1, y = centroid_X_2, color = plot_group)) +
-  geom_point(size = 0.5, alpha = 0.8) +
-  coord_fixed() +
-  theme_classic() +
-  scale_color_manual(
-    values = c(
-      "Endothelial_decidua" = "blue",
-      "Endothelial_muscle" = "cyan4",
-      "eEVT" = "red",
-      "Other" = "grey85"
-    )
-  ) +
-  guides(
-    color = guide_legend(
-      override.aes = list(size = 3, alpha = 1)
-    )
-  ) +
-  labs(
-    title = "Disease FAM: spatial distribution of eEVT and Endothelial cells by region",
-    x = "X coordinate",
-    y = "Y coordinate",
-    color = "Group"
-  )
+plot_cell_region_distribution(
+  df_disease_fam,
+  plot_title = "Disease FAM: spatial distribution of eEVT and Endothelial cells by region"
+)
 ```
 Visualization by region
 ```{r}
@@ -761,17 +786,17 @@ cozi_input_disease_fam <- df_disease_fam %>%
 coords_disease_fam <- as.matrix(cozi_input_disease_fam[, coordinate_columns])
 labels_disease_fam <- cozi_input_disease_fam$CellTypeManual.l2
 
-res_disease_fam <- run_cozi(
+res_cozi_disease <- run_cozi(
   coords = coords_disease_fam,
   labels = labels_disease_fam,
   nbh_def = "knn",
-  n_neighbors = 5L,
+  n_neighbors = 3L,
   n_permutations = 300L,
   random_state = 123
 )
 
-res_disease_fam$cond_ratio
-res_disease_fam$zscore
+res_cozi_disease$cond_ratio
+res_cozi_disease$zscore
 ```
 ```{r}
 # Count eEVT and Endothelial cells from your existing Seurat objects
@@ -971,13 +996,15 @@ wilcox_results %>%
 4.I carried out a Wilcoxon rank-sum test(due to unbalanced sample size and non-normal distribution) between two sample in terms of their pairwise distances in two cell types. Overall, eEVTs in the disease sample tended to be farther from endothelial cells than in control, particularly in the decidua
 
 ```{r}
-res_all$cond_ratio
-res_disease_fam$cond_ratio
-res_all$zscore
-res_disease_fam$zscore
+res_cozi_control$cond_ratio
+res_cozi_disease$cond_ratio
+res_cozi_control$zscore
+res_cozi_disease$zscore
 ```
 
 5.The most substantial change occurs in CCR score from endothelial cells to eEVT. It decreases from 0.076 to 0.0084, which is a ten fold change. In addition, z-score in disease sample between eEVT to eEVT decreases from 41 to 4.33, suggesting reduced self clustering?
+
+
 
 
 
