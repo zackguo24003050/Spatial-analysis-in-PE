@@ -25,7 +25,6 @@ We have also annotated cell types at two levels of resolution. This object have 
 
 We would like to quantify the neighbourhood preference of eEVT to endothelial and viceversa. Recall there are several ways to calculate neighbourhood preference. 
 
-
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
 library(Matrix)
 library(dplyr)
@@ -38,29 +37,22 @@ library(patchwork)
 ```
 
 # The object
-
 ```{r}
 obj_control_fvb <- readRDS(file = "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FVB_Myometrium.rds")
 obj_control_fvb
 ```
-
+# The metadata
 ```{r}
 head(obj_control_fvb@meta.data)
 ```
-Meta table
-
-```{r}
 # How many cells are per region?
+```{r}
 table(obj_control_fvb@meta.data$regions)
 ```
-
-```{r}
 # How many cell types at level 2 are in this object?
+```{r}
 table(obj_control_fvb@meta.data$CellTypeManual.l2)
 ```
-
-
-
 # **Tasks**
 Modify the code above to output the nearests neighbour per region (decidua and myometrium). We would like to make a plot per region and compare neighborhoods.
 
@@ -124,7 +116,8 @@ Modify the code above to output the nearests neighbour per region (decidua and m
 # [1,] 0.00 1.41 2.50
 # [2,] 0.00 1.00 3.20
 ```
-Function explanation
+
+#Define function for later graphs
 ```{r}
 # Make a simple dataframe from metadata
 df_control_fvb <- obj_control_fvb@meta.data %>%
@@ -310,7 +303,9 @@ plot_cell_region_distribution <- function(cell_metadata,
                                           regions = c("decidua", "muscle"),
                                           coordinate_columns = c("centroid_X_1", "centroid_X_2"),
                                           cell_type_col = "CellTypeManual.l2",
-                                          region_col = "regions") {
+                                          region_col = "regions",
+                                          x_limits = c(0, 10000),
+                                          y_limits = c(0, 7000)) {
   
   required_columns <- c(
     coordinate_columns,
@@ -354,7 +349,7 @@ plot_cell_region_distribution <- function(cell_metadata,
     )
   ) +
     geom_point(size = 0.5, alpha = 0.8) +
-    coord_fixed() +
+    coord_fixed(xlim = x_limits, ylim = y_limits, expand = FALSE) +
     theme_classic() +
     scale_color_manual(
       values = c(
@@ -380,39 +375,16 @@ plot_cell_region_distribution <- function(cell_metadata,
 
 ```
 
-```{r}
-# Spatial plot coloured by cell type
-plot_tissue_celltype <- ggplot(
-  df_control_fvb,
-  aes(x = centroid_X_1, y = centroid_X_2, color = CellTypeManual.l2)
-) +
-  geom_point(size = 0.5, alpha = 0.8) +
-  coord_fixed() +
-  theme_classic() +
-  labs(
-    title = "Control FVB:Spatial distribution of eEVT and Endothelial cells",
-    x = "X coordinate",
-    y = "Y coordinate",
-    color = "Cell type"
-  ) +
-  guides(
-    color = guide_legend(
-      override.aes = list(size = 3, alpha = 1)
-    )
-  )
-
-plot_tissue_celltype
-```
-Visualization not by region
+Visualization by region
 ```{r}
 plot_cell_region_distribution(
   df_control_fvb,
   plot_title = "Control FVB: spatial distribution of eEVT and Endothelial cells by region"
 )
 ```
-Visualization by region
-```{r}
+
 # Build the nearest-neighbour table within each tissue region.
+```{r}
 nn_table <- build_knn_table(
   cell_metadata = df_control_fvb,
   n_neighbours = 1,
@@ -433,7 +405,6 @@ plot_neighbour_heatmap(
   plot_title = "Control FVB nearest-neighbour preference, total normalisation"
 )
 ```
-
 ```{r}
 nn_prop_table_region <- summarise_neighbour_pairs(
   neighbour_table = nn_table,
@@ -446,14 +417,13 @@ p_control_heatmap_k1 <- plot_neighbour_heatmap(
 )
 p_control_heatmap_k1
 ```
-
 ```{r}
 nn_summary_table <- nn_table %>%
   filter(
     cell_type %in% target_cell_types,
     nearest_cell_type %in% target_cell_types
   ) %>%
-  group_by(cell_region, cell_type, nearest_cell_type) %>%
+  # group_by(cell_region, cell_type, nearest_cell_type) %>%
   summarise(
     count = n(),
     mean_distance = mean(distance, na.rm = TRUE),
@@ -480,7 +450,9 @@ nn_summary_table
 ```{r}
 plot_neighbour_distances(nn_table)
 ```
+
 ```{r}
+#Keep 99 percentile to make the plot less biased
 nn_table_plot <- nn_table %>%
   filter(
     cell_type %in% target_cell_types,
@@ -498,8 +470,6 @@ nn_table_plot <- nn_table %>%
   )
 
 ymax <- quantile(nn_table_plot$distance, 0.99, na.rm = TRUE)
-```
-```{r}
 ggplot(nn_table_plot, aes(x = pair, y = distance, fill = pair)) +
   geom_violin(trim = FALSE, alpha = 0.7) +
   facet_wrap(~ cell_region) +
@@ -515,9 +485,6 @@ ggplot(nn_table_plot, aes(x = pair, y = distance, fill = pair)) +
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 ```
-
-
-
 ```{r}
 make_neighbour_proportion <- function(cell_metadata, n_neighbours = 10) {
   neighbour_table <- build_knn_table(
@@ -570,6 +537,7 @@ Conclusion:
 4.As k is increasing, the NEP between the two cell types increases
 
 ```{r}
+#Calculate the average distance for each value of k
 k_distance_values <- c(2, 10, 30, 50, 100)
 
 k_distance_table <- lapply(k_distance_values, function(k) {
@@ -592,6 +560,7 @@ k_distance_table
 ```
 
 ```{r}
+#Cozi calculation
 library("coziR")
 cozi_input <- df_control_fvb %>%
   filter(
@@ -602,6 +571,7 @@ cozi_input <- df_control_fvb %>%
 coords <- as.matrix(cozi_input[, coordinate_columns])
 labels <- cozi_input$CellTypeManual.l2
 
+#Neighborhood is defined by nearest 3 neighbors,and number of permutation is 300.
 res_cozi_control <- run_cozi(
   coords = coords,
   labels = labels,
@@ -619,15 +589,11 @@ CCR: Most eEVT has a neighbouring endothelial cell, while only a small fraction 
 Z score: 60.7 might suggest a strong spatial pattern.
 
 Disease dataset：
-
 ```{r}
 obj_disease_fam <- readRDS(file = "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FAM_Myometrium.rds")
 head(obj_disease_fam@meta.data)
 ```
-```{r}
-table(obj_disease_fam@meta.data$regions)
-```
-How many cells are per region
+How many cells are there per region
 ```{r}
 table(obj_disease_fam@meta.data$CellTypeManual.l2, obj_disease_fam@meta.data$regions)
 ```
@@ -635,6 +601,7 @@ table(obj_disease_fam@meta.data$CellTypeManual.l2, obj_disease_fam@meta.data$reg
 table(obj_disease_fam@meta.data$CellTypeManual.l2, obj_disease_fam@meta.data$regions)
 ```
 ```{r}
+#Create data frame
 df_disease_fam <- obj_disease_fam@meta.data %>%
   select(
     cell_id_donor,
@@ -644,16 +611,13 @@ df_disease_fam <- obj_disease_fam@meta.data %>%
     CellTypeManual.l2
   )
 ```
-
-Visualization not by region
-
+Visualization by region
 ```{r}
 plot_cell_region_distribution(
   df_disease_fam,
   plot_title = "Disease FAM: spatial distribution of eEVT and Endothelial cells by region"
 )
 ```
-Visualization by region
 ```{r}
 # Build the nearest-neighbour table within each tissue region.
 nn_table_disease_fam <- build_knn_table(
@@ -672,11 +636,12 @@ nn_prop_table_region_disease_fam <- summarise_neighbour_pairs(
 )
 p_disease_heatmap_k1 <- plot_neighbour_heatmap(
   nn_prop_table_region_disease_fam,
-  plot_title = "Disease FAM"
+  plot_title = "Disease FAM Nearest Neighbor Preference, Conditional Normalization"
 )
 p_disease_heatmap_k1
 ```
 ```{r}
+#Summary data for each nereast neighbor pairs
 nn_summary_table_disease_fam <- nn_table_disease_fam %>%
   filter(
     cell_type %in% target_cell_types,
@@ -725,16 +690,14 @@ nn_table_plot_disease_fam <- nn_table_disease_fam %>%
     )
   )
 ymax_disease_fam <- quantile(nn_table_plot_disease_fam$distance, 0.99, na.rm = TRUE)
-```
 
-```{r}
 ggplot(nn_table_plot_disease_fam, aes(x = pair, y = distance, fill = pair)) +
   geom_violin(trim = FALSE, alpha = 0.7) +
   facet_wrap(~ cell_region) +
   coord_cartesian(ylim = c(0, ymax_disease_fam)) +
   theme_classic() +
   labs(
-    title = "Disease FAM: nearest-neighbour distance distribution by cell-type pair and region",
+    title = "Nearest-neighbour distance distribution by cell-type pair and region",
     x = "Cell-type pair",
     y = "Euclidean distance"
   ) +
@@ -742,39 +705,6 @@ ggplot(nn_table_plot_disease_fam, aes(x = pair, y = distance, fill = pair)) +
     legend.position = "none",
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
-```
-```{r}
-neighbour_results_by_k_disease_fam <- lapply(k_values, function(k) {
-  make_neighbour_proportion(df_disease_fam, n_neighbours = k)
-})
-names(neighbour_results_by_k_disease_fam) <- paste0("k", k_values)
-
-head(neighbour_results_by_k_disease_fam$k10$neighbour_table)
-
-for (result_name in names(neighbour_results_by_k_disease_fam)) {
-  print(neighbour_results_by_k_disease_fam[[result_name]]$heatmap)
-}
-```
-```{r}
-k_distance_values <- c(2, 10, 30, 50, 100)
-
-k_distance_table_disease_fam <- lapply(k_distance_values, function(k) {
-  build_knn_table(
-    cell_metadata = df_disease_fam,
-    n_neighbours = k,
-    group_columns = "regions",
-    coordinate_columns = coordinate_columns
-  ) %>%
-    filter(neighbour_rank == k) %>%
-    summarise(
-      k = k,
-      mean_last_neighbour_distance = mean(distance, na.rm = TRUE),
-      .groups = "drop"
-    )
-}) %>%
-  bind_rows()
-
-k_distance_table_disease_fam
 ```
 ```{r}
 cozi_input_disease_fam <- df_disease_fam %>%
@@ -852,7 +782,6 @@ Count_disease_versus_control
 1.Number and percentage of eEVT significantly decreases, particularly in the muscle region. This suggests reduced invasion(possibly impaired remodelling?)
 
 ```{r}
-
 p_control_heatmap_k1
 p_disease_heatmap_k1
 ```
@@ -950,8 +879,11 @@ shapiro.test(disease_muscle_distance)
 ```
 
 ```{r}
-# Make sure the distance table exists
-distance_test_data <- bind_rows(
+target_cell_types <- c("eEVT", "Endothelial")
+target_regions <- c("decidua", "muscle")
+
+# Combine control and disease nearest-neighbour distance tables
+distance_test_data_all <- bind_rows(
   nn_table %>%
     mutate(dataset = "Control FVB"),
   
@@ -959,38 +891,79 @@ distance_test_data <- bind_rows(
     mutate(dataset = "Disease FAM")
 ) %>%
   filter(
-    cell_region %in% c("decidua", "muscle"),
-    cell_type == "eEVT",
-    nearest_cell_type == "Endothelial"
+    cell_region %in% target_regions,
+    cell_type %in% target_cell_types,
+    nearest_cell_type %in% target_cell_types
+  ) %>%
+  mutate(
+    dataset = factor(dataset, levels = c("Control FVB", "Disease FAM")),
+    cell_type = factor(cell_type, levels = target_cell_types),
+    nearest_cell_type = factor(nearest_cell_type, levels = target_cell_types),
+    cell_region = factor(cell_region, levels = target_regions)
   )
 
-# Run Wilcoxon test
-wilcox_results <- distance_test_data %>%
-  group_by(cell_region) %>%
+# Run Wilcoxon test for every region × query cell type × nearest-neighbour cell type
+wilcox_results_all_pairs <- distance_test_data_all %>%
+  group_by(cell_region, cell_type, nearest_cell_type) %>%
   summarise(
     control_n = sum(dataset == "Control FVB"),
     disease_n = sum(dataset == "Disease FAM"),
+    
     control_median = median(distance[dataset == "Control FVB"], na.rm = TRUE),
     disease_median = median(distance[dataset == "Disease FAM"], na.rm = TRUE),
-    p_value = wilcox.test(distance ~ dataset)$p.value,
+    
+    control_mean = mean(distance[dataset == "Control FVB"], na.rm = TRUE),
+    disease_mean = mean(distance[dataset == "Disease FAM"], na.rm = TRUE),
+    
+    p_value = if_else(
+      control_n > 0 & disease_n > 0,
+      wilcox.test(distance ~ dataset, exact = FALSE)$p.value,
+      NA_real_
+    ),
+    
     .groups = "drop"
   ) %>%
   mutate(
-    p_adj = p.adjust(p_value, method = "BH")
-  )
-
-# Print results
-wilcox_results %>%
+    p_adj = p.adjust(p_value, method = "BH"),
+    distance_change = disease_median - control_median,
+    direction = case_when(
+      is.na(distance_change) ~ NA_character_,
+      distance_change > 0 ~ "Longer in Disease",
+      distance_change < 0 ~ "Shorter in Disease",
+      TRUE ~ "No median change"
+    ),
+    pair = paste0(cell_type, " -> ", nearest_cell_type)
+  ) %>%
   select(
     cell_region,
+    pair,
+    cell_type,
+    nearest_cell_type,
     control_n,
     disease_n,
     control_median,
     disease_median,
+    distance_change,
+    direction,
     p_value,
     p_adj
   ) %>%
-  print()
+  arrange(cell_region, cell_type, nearest_cell_type)
+
+# Print result
+options(scipen = 999)
+
+wilcox_results_all_pairs_print <- wilcox_results_all_pairs %>%
+  mutate(
+    control_median = round(control_median, 3),
+    disease_median = round(disease_median, 3),
+    distance_change = round(distance_change, 3),
+    p_value = formatC(p_value, format = "f", digits = 6),
+    p_adj = formatC(p_adj, format = "f", digits = 6)
+  )
+
+wilcox_results_all_pairs_print %>%
+  print(n = Inf)
 ```
 
 4.I carried out a Wilcoxon rank-sum test(due to unbalanced sample size and non-normal distribution) between two sample in terms of their pairwise distances in two cell types. Overall, eEVTs in the disease sample tended to be farther from endothelial cells than in control, particularly in the decidua
@@ -1004,6 +977,21 @@ res_cozi_disease$zscore
 
 5.The most substantial change occurs in CCR score from endothelial cells to eEVT. It decreases from 0.076 to 0.0084, which is a ten fold change. In addition, z-score in disease sample between eEVT to eEVT decreases from 41 to 4.33, suggesting reduced self clustering?
 
+```{r}
+#Cozi plot
+p_control <- cozi_dotplot(
+  res_cozi_control,
+  title = "Control FVB"
+)
+
+p_disease <- cozi_dotplot(
+  res_cozi_disease,
+  title = "Disease FAM"
+)
+
+p_control
+p_disease
+```
 
 
 
