@@ -1,0 +1,595 @@
+---
+title: "SpatialCellchat"
+author: "Zack"
+date: "2026-06-12"
+output: html_document
+knit: >-
+  (function(inputFile, encoding) {
+    progressr::handlers(global = TRUE)
+    rmarkdown::render(
+      input = inputFile,
+      encoding = encoding,
+      envir = new.env(parent = globalenv())
+    )
+  })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load the library
+```{r}
+library(SpatialCellChat)
+library(Matrix)
+library(patchwork)
+library(dplyr)
+library(ggplot2)
+library(Seurat)
+options(stringsAsFactors = F)
+
+# SpatialCellChat progressr workaround for R Markdown
+future::plan("sequential")
+```
+
+Part I: Data input & processing and initialization of Spatial CellChat object
+Load the data
+```{r,eval=FALSE}
+#Load RDS
+obj_control_fvb <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FVB_Myometrium.rds"
+)
+
+# Set Xenium as the active assay
+DefaultAssay(obj_control_fvb) <- "Xenium"
+
+# Generate normalized log-expression data
+obj_control_fvb <- NormalizeData(
+  obj_control_fvb,
+  assay = "Xenium",
+  normalization.method = "LogNormalize",
+  scale.factor = 10000,
+  verbose = FALSE
+)
+
+#Prepare spatial coordinates of cells
+spatial.locs_control_fvb <- obj_control_fvb@meta.data[
+  colnames(obj_control_fvb),
+  c("centroid_X_1", "centroid_X_2"),
+  drop = FALSE
+]
+
+#Change name of columns to x and y
+colnames(spatial.locs_control_fvb) <- c("x", "y")
+
+#Define Xenium spatial factor. The spatial factor is already 1 so the conversion factor is just 1.
+conversion.factor <- 1
+spot.size <- 10
+
+#$tol=5 means it allows a 5 μm tolerance when defining spatial proximity.
+spatial.factors_control_fvb <- list(
+  ratio = conversion.factor,
+  tol = spot.size/2
+)
+```
+
+Create a Spatial CellChat object
+```{r,eval=FALSE}
+chat_control_fvb <- createSpatialCellChat(
+  object = obj_control_fvb,                  # Xenium Seurat object
+  group.by = "CellTypeManual.l2",            # cell-type annotation
+  assay = "Xenium",                          # normalized Xenium assay
+  datatype = "spatial",
+  coordinates = spatial.locs_control_fvb,    # cell centroid coordinates
+  spatial.factors = spatial.factors_control_fvb
+)
+
+# Inspect the SpatialCellChat object
+chat_control_fvb
+
+# Check cell identities used in the analysis. x_cent/y_cent means x/y coordinate of cell centroid.
+table(chat_control_fvb@idents)
+```
+
+Set the ligand-receptor interaction database
+```{r,eval=FALSE}
+custom_lr_clec11a_kit <- data.frame(
+  ligand = "CLEC11A",
+  receptor = "KIT",
+  
+  # Assign an individual pathway name so that the pair can be
+  # retained in pathway-level CellChat analysis
+  pathway_name = "CLEC11A",
+  
+  interaction_name = "CLEC11A_KIT",
+  interaction_name_2 = "CLEC11A - KIT",
+  
+  # CLEC11A is treated as a soluble ligand
+  annotation = "Secreted Signaling",
+  
+  evidence = paste(
+    "NicheNet-predicted EVT-to-artery interaction;",
+    "Greenbaum et al., Nature 2023, Fig. 6h;",
+    "doi:10.1038/s41586-023-06298-9"
+  ),
+  
+  stringsAsFactors = FALSE
+)
+
+# Merge the custom pair with the built-in human CellChat database
+CellChatDB_custom <- SpatialCellChat::updateCellChatDB(
+  db = custom_lr_clec11a_kit,
+  merged = TRUE,
+  species_target = "human"
+)
+
+CellChatDB_use <- SpatialCellChat::subsetDB(
+  CellChatDB_custom,
+  search = c(
+    "Secreted Signaling",
+    "ECM-Receptor",
+    "Cell-Cell Contact"
+  ),
+  non_protein = FALSE
+)
+```
+Pre-processing the expression data for cell-cell communication analysis
+```{r,eval=FALSE}
+# 1. Select the human Cell-Cell Contact database
+CellChatDB <- CellChatDB.human
+
+CellChatDB_contact <- subsetDB(
+  CellChatDB,
+  search = "Cell-Cell Contact",
+  non_protein = FALSE
+)
+
+# Assign the selected database to the SpatialCellChat object
+chat_control_fvb@DB <- CellChatDB_contact
+
+
+# 2. Subset expression data to signalling genes
+# This step is required even when using the whole database
+chat_control_fvb <- subsetData(chat_control_fvb)
+
+
+# 3. Count how many cells express each signalling gene
+# Do this BEFORE preProcessing/ALRA imputation
+n_cells_expressed <- Matrix::rowSums(
+  chat_control_fvb@data.signaling > 0
+)
+
+
+# 4. Retain genes detected in at least 10 cells
+min_cells_gene <- 10
+
+features_small_panel <- names(
+  n_cells_expressed[n_cells_expressed >= min_cells_gene]
+)
+
+
+# 5. Run SpatialCellChat preprocessing
+# This performs ALRA preprocessing on the signalling-expression matrix
+chat_control_fvb <- preProcessing(chat_control_fvb)
+
+
+# 6. Manually assign the genes retained for the small Xenium panel
+# This replaces identifyOverExpressedGenes()
+chat_control_fvb@var.features[["features"]] <- features_small_panel
+
+chat_control_fvb@var.features[["features.info"]] <- data.frame(
+  features = names(n_cells_expressed),
+  n_cells_expressed = as.numeric(n_cells_expressed),
+  selected = n_cells_expressed >= min_cells_gene,
+  row.names = names(n_cells_expressed),
+  stringsAsFactors = FALSE
+)
+
+
+# 7. Identify available ligand-receptor interactions
+# variable.both = FALSE means either the ligand or receptor must pass
+# the >=10-cell filter, while all required genes must be in the panel
+chat_control_fvb <- identifyOverExpressedInteractions(
+  chat_control_fvb,
+  variable.both = FALSE
+)
+```
+Part II: Inference of cell-cell communication network
+Compute the communication probability and infer cellular communication network at the individual cell level
+```{r expensive-computation, eval=FALSE}
+# Check the retained ligand-receptor pairs
+nrow(chat_control_fvb@LR$LRsig)
+
+# Confirm that the current analysis contains only contact signalling
+unique(chat_control_fvb@LR$LRsig$annotation)
+
+# 1. Compute communication probabilities between individual cells
+chat_control_fvb <- computeCommunProb(
+  chat_control_fvb,
+  distance.use = TRUE,
+  scale.distance = 0.8,
+  contact.dependent = TRUE,
+  interaction.range = 250,
+  contact.range = 20
+)
+
+#Checkpoint
+output_data_dir <- "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data"
+
+dir.create(
+  output_data_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+readr::write_rds(
+  chat_control_fvb,
+  file.path(
+    output_data_dir,
+    "chat_control_fvb_contactRange20_unfiltered.rds"
+  )
+)
+```
+
+```{r,eval=FALSE}
+#Load the checkpoint
+chat_control_fvb <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/chat_control_fvb_contactRange20_unfiltered.rds"
+)
+
+chat_control_fvb <- filterProbability(
+  chat_control_fvb
+)
+
+chat_control_fvb <- filterCommunication(
+  chat_control_fvb,
+  min.cells = NULL,
+  min.links = 10,
+  min.cells.sr = 10
+)
+```
+
+```{r,eval=FALSE}
+# Load the checkpoint generated after computeCommunProb()
+chat_control_fvb <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/chat_control_fvb_contactRange20_unfiltered.rds"
+)
+
+# Filter the individual-cell LR communication network
+chat_control_fvb <- filterProbability(
+  chat_control_fvb
+)
+
+chat_control_fvb <- filterCommunication(
+  chat_control_fvb,
+  min.cells = NULL,
+  min.links = 10,
+  min.cells.sr = 10
+)
+```
+
+Calculate group-level LR communication probability
+```{r,eval=FALSE}
+chat_control_fvb <- computeAvgCommunProb(
+  chat_control_fvb,
+  avg.type = "avg",
+  min.percent = 0.1,
+  min.cells.sr = 10,
+  do.permutation = TRUE,
+  nboot = 100,
+  seed.use = 1L
+)
+
+chat_control_fvb <- filterCommunication(
+  chat_control_fvb,
+  min.cells = 10,
+  min.links = NULL,
+  min.cells.sr = NULL
+)
+```
+
+Infer communication at signaling-pathway level
+```{r,eval=FALSE}
+chat_control_fvb <- computeCommunProbPathway(
+  chat_control_fvb,
+  thresh = 0.05,
+  do.group = TRUE,
+  do.cell = FALSE
+)
+```
+
+Calculate the aggregated communication network
+```{r,eval=FALSE}
+chat_control_fvb <- aggregateNet(
+  chat_control_fvb
+)
+```
+
+Compute network centrality scores
+```{r,eval=FALSE}
+chat_control_fvb <- SpatialCellChat::netAnalysis_computeCentrality(
+  chat_control_fvb,
+  slot.name = "net",
+  do.group = FALSE,
+  degree.only = TRUE
+)
+
+chat_control_fvb <- SpatialCellChat::netAnalysis_computeCentrality(
+  chat_control_fvb,
+  slot.name = "net",
+  do.group = TRUE,
+  degree.only = TRUE
+)
+
+chat_control_fvb <- SpatialCellChat::netAnalysis_computeCentrality(
+  chat_control_fvb,
+  slot.name = "netP",
+  do.group = TRUE,
+  degree.only = TRUE
+)
+```
+
+Load 4 processed data: Control contact. control secreted, dissease contact, disease secreted
+```{r}
+chat_disease_fam <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/chat_disease_fam_contactRange20_final.rds"
+)
+
+chat_disease_fam_secreted <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/chat_disease_fam_secreted_range250_final.rds"
+)
+
+chat_control_fvb <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/chat_control_fvb_contactRange20_final.rds"
+)
+
+chat_control_fvb_secreted <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/chat_control_fvb_secreted_range250_final.rds"
+)
+```
+
+```{r}
+sig_lr_control_contact <- SpatialCellChat::subsetCommunication(
+  chat_control_fvb,
+  slot.name = "net",
+  thresh = 0.01
+) %>%
+  arrange(pval, desc(prob))
+
+sig_lr_disease_contact <- SpatialCellChat::subsetCommunication(
+  chat_disease_fam,
+  slot.name = "net",
+  thresh = 0.01
+) %>%
+  arrange(pval, desc(prob))
+
+sig_lr_control_secreted <- SpatialCellChat::subsetCommunication(
+  chat_control_fvb_secreted,
+  slot.name = "net",
+  thresh = 0.01
+) %>%
+  arrange(pval, desc(prob))
+
+sig_lr_disease_secreted <- SpatialCellChat::subsetCommunication(
+  chat_disease_fam_secreted,
+  slot.name = "net",
+  thresh = 0.01
+) %>%
+  arrange(pval, desc(prob))
+```
+
+```{r}
+sig_lr_control_contact
+sig_lr_disease_contact
+
+sig_lr_control_secreted
+sig_lr_disease_secreted
+```
+
+
+identity check
+```{r}
+# Load original Seurat objects
+obj_control_fvb <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FVB_Myometrium.rds"
+)
+
+obj_disease_fam <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FAM_Myometrium.rds"
+)
+```
+
+```{r}
+marker_panels <- list(
+  `immune genes` = c(
+    "CTLA4", "PDCD1",
+    "NKG7", "KLRD1", "GNLY",
+    "LST1", "TYROBP", "FCER1G",
+    "LILRB2", "MRC1",
+    "CEACAM8", "CCR3",
+    "CCR4", "CCR5", "CCR7",
+    "CXCR5", "CXCR6"
+  ),
+
+  `chemokine program` = c(
+    "TNF",
+    "CCL3", "CCL3L1",
+    "CCL4", "CCL5",
+    "CXCL13"
+  ),
+
+  `MHC-I / lineage check` = c(
+    "HLA-G", "HLA-B",
+    "CD8A", "CD8B",
+    "PTPRC", "TRAC", "CD3D", "CD3E",
+    "KRT7", "ITGA5", "MMP2",
+    "PECAM1", "VWF"
+  )
+)
+
+```
+
+```{r}
+make_identity_check <- function(obj, plot_title) {
+
+  DefaultAssay(obj) <- "Xenium"
+
+  obj_sub <- subset(
+    obj,
+    subset = CellTypeManual.l2 %in% c("eEVT", "Endothelial")
+  )
+
+  obj_sub$CellTypeManual.l2 <- factor(
+    obj_sub$CellTypeManual.l2,
+    levels = c("eEVT", "Endothelial")
+  )
+
+  panel_genes <- rownames(obj_sub[["Xenium"]])
+
+  markers_present <- lapply(
+    marker_panels,
+    function(x) intersect(x, panel_genes)
+  )
+
+  # Remove empty marker categories
+  markers_present <- markers_present[lengths(markers_present) > 0]
+
+  DotPlot(
+    obj_sub,
+    features = markers_present,
+    group.by = "CellTypeManual.l2",
+    assay = "Xenium",
+    scale = TRUE,
+    dot.scale = 6
+  ) +
+    RotatedAxis() +
+    labs(
+      title = plot_title,
+      x = "Marker genes",
+      y = "Cell identity"
+    ) +
+    theme(
+      axis.text.x = element_text(
+        angle = 45,
+        hjust = 1,
+        size = 8
+      ),
+      axis.text.y = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5),
+      strip.text = element_text(size = 8)
+    )
+}
+```
+
+```{r}
+p_control_identity <- make_identity_check(
+  obj_control_fvb,
+  "Control FVB: eEVT and Endothelial identity check"
+)
+
+p_control_identity
+
+p_disease_identity <- make_identity_check(
+  obj_disease_fam,
+  "Disease FAM: eEVT and Endothelial identity check"
+)
+
+p_disease_identity
+```
+```{r}
+key_gene_panels <- list(
+  `Contact LR hits` = c(
+    "JAG1", "NOTCH2", "NOTCH3",
+    "CD274", "PDCD1LG2", "PDCD1",   # PD-L1, PD-L2, PD-1
+    "CEACAM1",
+    "CDH5"
+  ),
+  
+  `Secreted LR hits` = c(
+    "CCL5", "CCL21", "CCL28",
+    "CCR3", "CCR7",
+    "SPP1", "CD44",
+    "CSF1", "CSF1R",
+    
+    # IL1 / IL2 / IL4 signaling
+    "IL1B", "IL1R1", "IL1RAP",
+    "IL2", "IL2RG",
+    "IL4", "IL4R"
+  )
+)
+
+make_key_gene_check <- function(obj, plot_title) {
+  
+  DefaultAssay(obj) <- "Xenium"
+  
+  obj_sub <- subset(
+    obj,
+    subset = CellTypeManual.l2 %in% c("eEVT", "Endothelial")
+  )
+  
+  obj_sub$CellTypeManual.l2 <- factor(
+    obj_sub$CellTypeManual.l2,
+    levels = c("eEVT", "Endothelial")
+  )
+  
+  panel_genes <- rownames(obj_sub[["Xenium"]])
+  
+  key_genes_present <- lapply(
+    key_gene_panels,
+    function(x) intersect(x, panel_genes)
+  )
+  
+  key_genes_present <- key_genes_present[lengths(key_genes_present) > 0]
+  
+  DotPlot(
+    obj_sub,
+    features = key_genes_present,
+    group.by = "CellTypeManual.l2",
+    assay = "Xenium",
+    scale = TRUE,
+    dot.scale = 3.2,     # smaller dots
+    dot.min = 0.01       # remove extremely tiny background dots
+  ) +
+    RotatedAxis() +
+    labs(
+      title = plot_title,
+      x = "Key genes",
+      y = "Cell type"
+    ) +
+    theme(
+      axis.text.x = element_text(
+        angle = 45,
+        hjust = 1,
+        vjust = 1,
+        size = 7
+      ),
+      axis.text.y = element_text(size = 9),
+      axis.title.x = element_text(size = 10),
+      axis.title.y = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5, size = 11),
+      strip.text = element_text(size = 7),
+      legend.text = element_text(size = 7),
+      legend.title = element_text(size = 8),
+      panel.spacing = unit(0.8, "lines")
+    )
+}
+
+p_control_key <- make_key_gene_check(
+  obj_control_fvb,
+  "Control FVB: key LR gene check"
+)
+
+p_disease_key <- make_key_gene_check(
+  obj_disease_fam,
+  "Disease FAM: key LR gene check"
+)
+
+p_control_key
+p_disease_key
+```
+
+```{r}
+spatialCCCDistPlot(chat_control_fvb)
+```
+
+
