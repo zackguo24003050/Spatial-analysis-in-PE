@@ -1,0 +1,1509 @@
+---
+title: "Ligand-Receptor Exploration organized eEVT Endothelial"
+output: html_document
+date: "2026-06-10"
+knit: >
+  (function(inputFile, encoding) {
+    rmarkdown::render(
+      inputFile,
+      encoding = encoding,
+      output_dir = "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output",
+      output_file = "Ligand-Receptor Exploration organized eEVT Endothelial.html"
+    )
+  })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(Matrix)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(Seurat)
+library(knitr)
+library(ggplot2)
+library(RANN)
+library(patchwork)
+library(liana)
+```
+
+## Analysis settings
+
+```{r analysis-settings}
+assay_name <- "Xenium"
+celltype_col <- "CellTypeManual.l2"
+sig_cutoff <- 0.05
+
+dataset_info <- tibble::tibble(
+  dataset = c("Control FVB", "Disease FAM"),
+  dataset_short = c("control", "disease"),
+  file = c(
+    "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FVB_Myometrium.rds",
+    "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FAM_Myometrium.rds"
+  )
+)
+
+source_type <- "eEVT"
+target_type <- "Endothelial"
+```
+
+```{r custom-liana-pairs}
+custom_liana_pairs <- tibble::tibble(
+  source_genesymbol = c("CLEC11A", "CXCL12", "ICAM1", "CDH5"),
+  target_genesymbol = c("KIT", "CXCR4", "ITGAX", "CDH5")
+)
+```
+
+```{r selected-liana-pairs}
+selected_pairs <- c(
+  "FN1 -> CD44",
+  "SPP1 -> CD44",
+  "JAG1 -> NOTCH1",
+  "JAG1 -> NOTCH3",
+  "LEP -> LEPR"
+)
+```
+
+```{r selected-manual-pairs}
+selected_lr_manual <- tibble::tibble(
+  ligand = c("CLEC11A", "CXCL12", "ICAM1", "CDH5", "JAG1"),
+  receptor = c("KIT", "CXCR4", "ITGAX", "CDH5", "NOTCH1")
+) %>%
+  mutate(
+    lr_complex = paste(ligand, receptor, sep = " -> "),
+    pair_order = seq_len(n())
+  )
+```
+
+## Functions
+
+```{r load-spatial-objects}
+load_spatial_objects <- function(dataset_info) {
+  # Read each Seurat object and keep dataset labels as list names.
+  objects <- lapply(dataset_info$file, readRDS)
+  names(objects) <- dataset_info$dataset
+  objects
+}
+```
+
+```{r make-custom-liana-resource}
+make_custom_liana_resource <- function(custom_pairs) {
+  # Add selected literature pairs to LIANA's Consensus resource.
+  base_lr <- liana::select_resource("Consensus")[[1]]
+
+  custom_pairs_full <- custom_pairs %>%
+    mutate(
+      source = source_genesymbol,
+      target = target_genesymbol,
+      category_intercell_source = "custom_ligand",
+      database_intercell_source = "Custom",
+      category_intercell_target = "custom_receptor",
+      database_intercell_target = "Custom",
+      sources = "Custom_added_from_literature",
+      references = NA_character_
+    )
+
+  missing_cols <- setdiff(names(base_lr), names(custom_pairs_full))
+  custom_pairs_full[missing_cols] <- NA
+  custom_pairs_full <- custom_pairs_full[, names(base_lr)]
+
+  bind_rows(base_lr, custom_pairs_full) %>%
+    distinct(source_genesymbol, target_genesymbol, .keep_all = TRUE)
+}
+```
+
+```{r check-custom-liana-resource}
+check_custom_liana_resource <- function(custom_lr, custom_pairs) {
+  # Check whether the custom pairs are present in the resource.
+  selected_lr <- paste(
+    custom_pairs$source_genesymbol,
+    custom_pairs$target_genesymbol,
+    sep = " -> "
+  )
+
+  custom_lr %>%
+    filter(
+      paste(source_genesymbol, target_genesymbol, sep = " -> ") %in% selected_lr
+    ) %>%
+    select(source_genesymbol, target_genesymbol, sources)
+}
+```
+
+```{r prepare-spatial-object}
+prepare_spatial_object <- function(obj, assay = "Xenium", celltype_col = "CellTypeManual.l2") {
+  # Set assay, set identities, and normalize the object.
+  DefaultAssay(obj) <- assay
+  Idents(obj) <- celltype_col
+
+  NormalizeData(
+    obj,
+    assay = assay,
+    verbose = FALSE
+  )
+}
+```
+
+```{r run-liana-dataset}
+run_liana_dataset <- function(
+    obj,
+    dataset_name,
+    custom_lr,
+    assay = "Xenium",
+    celltype_col = "CellTypeManual.l2"
+) {
+  # Run LIANA and aggregate method ranks for one dataset.
+  liana_wrap(
+    obj,
+    resource = "custom",
+    external_resource = custom_lr,
+    idents_col = celltype_col,
+    assay = assay
+  ) %>%
+    liana_aggregate() %>%
+    mutate(dataset = dataset_name, .before = 1)
+}
+```
+
+```{r run-liana-all}
+run_liana_all <- function(
+    objects,
+    custom_lr,
+    assay = "Xenium",
+    celltype_col = "CellTypeManual.l2"
+) {
+  # Run LIANA for all datasets and return per-dataset and combined results.
+  liana_by_dataset <- lapply(
+    names(objects),
+    function(dataset_name) {
+      run_liana_dataset(
+        objects[[dataset_name]],
+        dataset_name,
+        custom_lr = custom_lr,
+        assay = assay,
+        celltype_col = celltype_col
+      )
+    }
+  )
+
+  names(liana_by_dataset) <- names(objects)
+
+  list(
+    by_dataset = liana_by_dataset,
+    all = bind_rows(liana_by_dataset)
+  )
+}
+```
+
+```{r make-direction-top-table}
+make_direction_top_table <- function(
+    liana_all,
+    source_type,
+    target_type,
+    top_n = 20
+) {
+  # Keep both directions between the same two cell types and show top pairs.
+  liana_all %>%
+    filter(
+      (source == source_type & target == target_type) |
+        (source == target_type & target == source_type)
+    ) %>%
+    arrange(dataset, source, target, aggregate_rank) %>%
+    mutate(
+      direction = paste(source, target, sep = " -> "),
+      lr_complex = paste(ligand.complex, receptor.complex, sep = " -> ")
+    ) %>%
+    group_by(dataset, direction) %>%
+    slice_head(n = top_n) %>%
+    ungroup() %>%
+    select(
+      dataset,
+      direction,
+      lr_complex,
+      aggregate_rank,
+      mean_rank,
+      everything()
+    )
+}
+```
+
+```{r plot-liana-heat-frequency}
+plot_liana_heat_frequency <- function(liana_result, sig_cutoff = 0.05) {
+  # Plot LIANA cell-pair frequency heatmap for significant interactions.
+  liana_trunc <- liana_result %>%
+    filter(aggregate_rank <= sig_cutoff) %>%
+    arrange(aggregate_rank)
+
+  heat_freq(liana_trunc)
+}
+```
+
+```{r make-direction-comparison-table}
+make_direction_comparison_table <- function(
+    liana_all,
+    dataset_info,
+    source_type,
+    target_type,
+    sig_cutoff = 0.05
+) {
+  # Compare whether each significant LR pair appears in each dataset.
+  sig_pairs <- liana_all %>%
+    filter(
+      source == source_type,
+      target == target_type,
+      aggregate_rank <= sig_cutoff
+    ) %>%
+    mutate(
+      lr_complex = paste(ligand.complex, receptor.complex, sep = " -> ")
+    ) %>%
+    distinct(ligand.complex, receptor.complex, lr_complex)
+
+  full_for_sig_pairs <- liana_all %>%
+    filter(
+      source == source_type,
+      target == target_type
+    ) %>%
+    left_join(
+      dataset_info %>% select(dataset, dataset_short),
+      by = "dataset"
+    ) %>%
+    mutate(
+      lr_complex = paste(ligand.complex, receptor.complex, sep = " -> ")
+    ) %>%
+    semi_join(
+      sig_pairs,
+      by = c("ligand.complex", "receptor.complex", "lr_complex")
+    ) %>%
+    group_by(dataset_short, ligand.complex, receptor.complex, lr_complex) %>%
+    slice_min(aggregate_rank, n = 1, with_ties = FALSE) %>%
+    ungroup() %>%
+    mutate(
+      significant = if_else(aggregate_rank <= sig_cutoff, 1L, 0L)
+    ) %>%
+    select(
+      dataset_short,
+      ligand.complex,
+      receptor.complex,
+      lr_complex,
+      aggregate_rank,
+      mean_rank,
+      significant
+    )
+
+  comparison_table <- expand_grid(
+    sig_pairs,
+    dataset_short = dataset_info$dataset_short
+  ) %>%
+    left_join(
+      full_for_sig_pairs,
+      by = c("ligand.complex", "receptor.complex", "lr_complex", "dataset_short")
+    ) %>%
+    mutate(
+      significant = replace_na(significant, 0L)
+    ) %>%
+    pivot_wider(
+      names_from = dataset_short,
+      values_from = c(significant, aggregate_rank, mean_rank),
+      names_glue = "{dataset_short}_{.value}"
+    )
+
+  significant_cols <- grep("_significant$", names(comparison_table), value = TRUE)
+  comparison_table$.sort_significant_count <- rowSums(
+    comparison_table[significant_cols],
+    na.rm = TRUE
+  )
+
+  comparison_table %>%
+    arrange(
+      desc(.sort_significant_count),
+      lr_complex
+    ) %>%
+    select(
+      lr_complex,
+      ends_with("_significant"),
+      ends_with("_aggregate_rank"),
+      ends_with("_mean_rank")
+    )
+}
+```
+
+```{r make-direction-presence-table}
+make_direction_presence_table <- function(
+    liana_all,
+    dataset_info,
+    source_type,
+    target_type,
+    sig_cutoff = 0.05
+) {
+  # Mark significant LR pairs as present or absent in each dataset.
+  liana_all %>%
+    filter(
+      source == source_type,
+      target == target_type,
+      aggregate_rank <= sig_cutoff
+    ) %>%
+    left_join(
+      dataset_info %>% select(dataset, dataset_short),
+      by = "dataset"
+    ) %>%
+    mutate(
+      lr_complex = paste(ligand.complex, receptor.complex, sep = " -> ")
+    ) %>%
+    distinct(dataset_short, ligand.complex, receptor.complex, lr_complex) %>%
+    mutate(significant = 1L) %>%
+    complete(
+      nesting(ligand.complex, receptor.complex, lr_complex),
+      dataset_short = dataset_info$dataset_short,
+      fill = list(significant = 0L)
+    ) %>%
+    pivot_wider(
+      names_from = dataset_short,
+      values_from = significant,
+      names_glue = "{dataset_short}_significant"
+    )
+}
+```
+
+```{r calculate-pair-expression-support}
+calculate_pair_expression_support <- function(
+    obj,
+    pair_table,
+    source_type,
+    target_type,
+    assay = "Xenium",
+    celltype_col = "CellTypeManual.l2"
+) {
+  # Calculate expression and detection support for one source-target direction.
+  expr_norm <- GetAssayData(
+    obj,
+    assay = assay,
+    layer = "data"
+  )
+
+  expr_counts <- GetAssayData(
+    obj,
+    assay = assay,
+    layer = "counts"
+  )
+
+  cells <- intersect(colnames(expr_norm), rownames(obj@meta.data))
+  expr_norm <- expr_norm[, cells, drop = FALSE]
+  expr_counts <- expr_counts[, cells, drop = FALSE]
+
+  cell_type <- obj@meta.data[colnames(expr_norm), celltype_col]
+  source_cells <- colnames(expr_norm)[cell_type == source_type]
+  target_cells <- colnames(expr_norm)[cell_type == target_type]
+
+  lapply(seq_len(nrow(pair_table)), function(i) {
+    ligand <- pair_table$ligand.complex[i]
+    receptor <- pair_table$receptor.complex[i]
+    lr_complex <- pair_table$lr_complex[i]
+
+    ligand_genes <- unlist(strsplit(ligand, "_"))
+    receptor_genes <- unlist(strsplit(receptor, "_"))
+
+    ligand_genes_use <- intersect(ligand_genes, rownames(expr_norm))
+    receptor_genes_use <- intersect(receptor_genes, rownames(expr_norm))
+
+    ligand_expr <- if (length(ligand_genes_use) > 0) {
+      colMeans(expr_norm[ligand_genes_use, source_cells, drop = FALSE])
+    } else {
+      rep(0, length(source_cells))
+    }
+
+    ligand_detected <- if (length(ligand_genes_use) > 0) {
+      colSums(expr_counts[ligand_genes_use, source_cells, drop = FALSE] > 0) ==
+        length(ligand_genes_use)
+    } else {
+      rep(FALSE, length(source_cells))
+    }
+
+    receptor_expr <- if (length(receptor_genes_use) > 0) {
+      colMeans(expr_norm[receptor_genes_use, target_cells, drop = FALSE])
+    } else {
+      rep(0, length(target_cells))
+    }
+
+    receptor_detected <- if (length(receptor_genes_use) > 0) {
+      colSums(expr_counts[receptor_genes_use, target_cells, drop = FALSE] > 0) ==
+        length(receptor_genes_use)
+    } else {
+      rep(FALSE, length(target_cells))
+    }
+
+    ligand_mean_expr <- mean(ligand_expr)
+    receptor_mean_expr <- mean(receptor_expr)
+    ligand_detected_fraction <- mean(ligand_detected)
+    receptor_detected_fraction <- mean(receptor_detected)
+
+    data.frame(
+      lr_complex = lr_complex,
+      ligand.complex = ligand,
+      receptor.complex = receptor,
+      ligand_expr_source = ligand_mean_expr,
+      receptor_expr_target = receptor_mean_expr,
+      pair_expr_score = sqrt(ligand_mean_expr * receptor_mean_expr),
+      ligand_detected_fraction_source = ligand_detected_fraction,
+      receptor_detected_fraction_target = receptor_detected_fraction,
+      pair_detected_score = sqrt(
+        ligand_detected_fraction * receptor_detected_fraction
+      )
+    )
+  }) %>%
+    bind_rows()
+}
+```
+
+```{r make-expression-table}
+make_expression_table <- function(
+    objects,
+    dataset_info,
+    presence_table,
+    source_type,
+    target_type,
+    assay = "Xenium",
+    celltype_col = "CellTypeManual.l2"
+) {
+  # Add expression and detection support to the significant-pair table.
+  expression_by_dataset <- lapply(seq_len(nrow(dataset_info)), function(i) {
+    dataset_name <- dataset_info$dataset[i]
+    dataset_short <- dataset_info$dataset_short[i]
+
+    calculate_pair_expression_support(
+      objects[[dataset_name]],
+      presence_table,
+      source_type = source_type,
+      target_type = target_type,
+      assay = assay,
+      celltype_col = celltype_col
+    ) %>%
+      mutate(dataset_short = dataset_short, .before = 1)
+  }) %>%
+    bind_rows()
+
+  expression_wide <- expression_by_dataset %>%
+    pivot_wider(
+      id_cols = c(lr_complex, ligand.complex, receptor.complex),
+      names_from = dataset_short,
+      values_from = c(
+        ligand_expr_source,
+        receptor_expr_target,
+        pair_expr_score,
+        ligand_detected_fraction_source,
+        receptor_detected_fraction_target,
+        pair_detected_score
+      ),
+      names_glue = "{dataset_short}_{.value}"
+    )
+
+  expression_table <- presence_table %>%
+    left_join(
+      expression_wide,
+      by = c("lr_complex", "ligand.complex", "receptor.complex")
+    )
+
+  if (all(c("control_pair_expr_score", "disease_pair_expr_score") %in% names(expression_table))) {
+    expression_table <- expression_table %>%
+      mutate(
+      pair_expr_log2FC_disease_vs_control = log2(
+        (disease_pair_expr_score + 1e-6) /
+          (control_pair_expr_score + 1e-6)
+      )
+    )
+  }
+
+  significant_cols <- grep("_significant$", names(expression_table), value = TRUE)
+  expression_score_cols <- grep("_pair_expr_score$", names(expression_table), value = TRUE)
+
+  expression_table$.sort_significant_count <- rowSums(
+    expression_table[significant_cols],
+    na.rm = TRUE
+  )
+  expression_table$.sort_expression_score <- rowSums(
+    expression_table[expression_score_cols],
+    na.rm = TRUE
+  )
+
+  expression_table %>%
+    arrange(
+      desc(.sort_significant_count),
+      desc(.sort_expression_score),
+      lr_complex
+    ) %>%
+    select(
+      lr_complex,
+      ends_with("_significant"),
+      ends_with("_ligand_expr_source"),
+      ends_with("_receptor_expr_target"),
+      ends_with("_pair_expr_score"),
+      any_of("pair_expr_log2FC_disease_vs_control"),
+      ends_with("_ligand_detected_fraction_source"),
+      ends_with("_receptor_detected_fraction_target"),
+      ends_with("_pair_detected_score")
+    )
+}
+```
+
+```{r make-selected-liana-dotplots}
+make_selected_liana_dotplots <- function(
+    liana_all,
+    selected_pairs,
+    source_type,
+    target_type,
+    dataset_info
+) {
+  # Make one LIANA dotplot per dataset for selected LR pairs.
+  liana_selected <- liana_all %>%
+    mutate(
+      lr_complex = paste(ligand.complex, receptor.complex, sep = " -> ")
+    ) %>%
+    filter(
+      source == source_type,
+      target == target_type,
+      lr_complex %in% selected_pairs
+    ) %>%
+    mutate(
+      lr_complex = factor(lr_complex, levels = selected_pairs)
+    )
+
+  plots <- lapply(dataset_info$dataset, function(dataset_name) {
+    liana_selected %>%
+      filter(dataset == dataset_name) %>%
+      arrange(lr_complex) %>%
+      liana_dotplot(
+        source_groups = source_type,
+        target_groups = target_type,
+        ntop = length(selected_pairs),
+        magnitude = "sca.LRscore",
+        specificity = "natmi.edge_specificity",
+        colour.label = "Expression level",
+        size.label = "Interaction specificity"
+      ) +
+      ggtitle(paste0(dataset_name, ": ", source_type, " -> ", target_type)) +
+      guides(
+        size = guide_legend(order = 1),
+        colour = guide_colourbar(order = 2)
+      )
+  })
+
+  names(plots) <- dataset_info$dataset
+  plots
+}
+```
+
+```{r make-expression-bar-data}
+make_expression_bar_data <- function(
+    expression_table,
+    dataset_info,
+    selected_pairs = NULL
+) {
+  # Convert the wide expression table into long format for plotting.
+  expression_table_plot <- expression_table
+
+  if (!is.null(selected_pairs)) {
+    expression_table_plot <- expression_table_plot %>%
+      filter(lr_complex %in% selected_pairs)
+  }
+
+  pair_order <- expression_table_plot %>%
+    arrange(
+      if_else(pair_expr_log2FC_disease_vs_control <= 0, 0L, 1L),
+      if_else(
+        pair_expr_log2FC_disease_vs_control <= 0,
+        pair_expr_log2FC_disease_vs_control,
+        -pair_expr_log2FC_disease_vs_control
+      ),
+      lr_complex
+    ) %>%
+    pull(lr_complex)
+
+  lapply(seq_len(nrow(dataset_info)), function(i) {
+    dataset_name <- dataset_info$dataset[i]
+    dataset_short <- dataset_info$dataset_short[i]
+
+    significant_col <- paste0(dataset_short, "_significant")
+    expression_col <- paste0(dataset_short, "_pair_expr_score")
+    detected_col <- paste0(dataset_short, "_pair_detected_score")
+
+    expression_table_plot %>%
+      transmute(
+        lr_complex,
+        dataset = dataset_name,
+        significant = .data[[significant_col]],
+        expression_score = .data[[expression_col]],
+        detected_score = .data[[detected_col]],
+        pair_expr_log2FC_disease_vs_control = pair_expr_log2FC_disease_vs_control
+      )
+  }) %>%
+    bind_rows() %>%
+    mutate(
+      dataset = factor(dataset, levels = dataset_info$dataset),
+      lr_complex = factor(lr_complex, levels = pair_order)
+    )
+}
+```
+
+```{r run-direction-expression-analysis}
+run_direction_expression_analysis <- function(
+    objects,
+    liana_all,
+    dataset_info,
+    source_type,
+    target_type,
+    sig_cutoff = 0.05,
+    assay = "Xenium",
+    celltype_col = "CellTypeManual.l2"
+) {
+  # Build comparison table, expression table, and bar plot for one direction.
+  comparison_table <- make_direction_comparison_table(
+    liana_all,
+    dataset_info,
+    source_type = source_type,
+    target_type = target_type,
+    sig_cutoff = sig_cutoff
+  )
+
+  presence_table <- make_direction_presence_table(
+    liana_all,
+    dataset_info,
+    source_type = source_type,
+    target_type = target_type,
+    sig_cutoff = sig_cutoff
+  )
+
+  expression_table <- make_expression_table(
+    objects,
+    dataset_info,
+    presence_table,
+    source_type = source_type,
+    target_type = target_type,
+    assay = assay,
+    celltype_col = celltype_col
+  )
+
+  bar_data <- make_expression_bar_data(
+    expression_table,
+    dataset_info
+  )
+
+  list(
+    comparison_table = comparison_table,
+    expression_table = expression_table,
+    bar_data = bar_data,
+    bar_plot = plot_expression_bar(
+      bar_data,
+      source_type = source_type,
+      target_type = target_type
+    )
+  )
+}
+```
+
+```{r plot-expression-bar}
+plot_expression_bar <- function(
+    plot_data,
+    source_type,
+    target_type
+) {
+  # Plot expression support and label each LR pair with its log2 fold change.
+  label_offset <- max(plot_data$expression_score, na.rm = TRUE) * 0.05
+  if (!is.finite(label_offset) || label_offset == 0) {
+    label_offset <- 0.05
+  }
+
+  fc_label_data <- plot_data %>%
+    group_by(lr_complex) %>%
+    summarise(
+      expression_score = max(c(expression_score, 0), na.rm = TRUE) + label_offset,
+      pair_expr_log2FC_disease_vs_control = {
+        logfc_values <- pair_expr_log2FC_disease_vs_control[
+          !is.na(pair_expr_log2FC_disease_vs_control)
+        ]
+        if (length(logfc_values) == 0) NA_real_ else logfc_values[1]
+      },
+      .groups = "drop"
+    ) %>%
+    mutate(
+      fc_label = ifelse(
+        is.na(pair_expr_log2FC_disease_vs_control),
+        NA_character_,
+        sprintf("%.2f", pair_expr_log2FC_disease_vs_control)
+      )
+    )
+
+  ggplot(
+    plot_data,
+    aes(
+      x = lr_complex,
+      y = expression_score,
+      fill = dataset
+    )
+  ) +
+    geom_col(
+      position = position_dodge(width = 0.8),
+      width = 0.7,
+      colour = "black"
+    ) +
+    geom_text(
+      data = fc_label_data,
+      aes(
+        x = lr_complex,
+        y = expression_score,
+        label = fc_label
+      ),
+      inherit.aes = FALSE,
+      vjust = -0.2,
+      size = 3
+    ) +
+    labs(
+      title = paste(
+        source_type,
+        "->",
+        target_type,
+        "expression support for selected LR pairs"
+      ),
+      x = "Ligand-receptor pair",
+      y = "Pair expression score",
+      fill = "Dataset"
+    ) +
+    scale_y_continuous(
+      expand = expansion(mult = c(0, 0.25))
+    ) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+}
+```
+
+```{r calculate-manual-lr-expression}
+calculate_manual_lr_expression <- function(
+    obj,
+    dataset_name,
+    pairs,
+    assay = "Xenium",
+    celltype_col = "CellTypeManual.l2",
+    source_type = "eEVT",
+    target_type = "Endothelial"
+) {
+  # Calculate manual expression, detection, and specificity support.
+  expr_counts <- GetAssayData(obj, assay = assay, layer = "counts")
+  expr_norm <- GetAssayData(obj, assay = assay, layer = "data")
+
+  meta <- obj@meta.data
+  cell_type <- meta[colnames(expr_counts), celltype_col]
+
+  source_cells <- colnames(expr_counts)[cell_type == source_type]
+  target_cells <- colnames(expr_counts)[cell_type == target_type]
+
+  all_cell_types <- sort(unique(cell_type))
+
+  get_complex_expr <- function(mat, genes, cells) {
+    genes_use <- intersect(genes, rownames(mat))
+
+    if (length(genes_use) == 0) {
+      return(rep(NA_real_, length(cells)))
+    }
+
+    colMeans(mat[genes_use, cells, drop = FALSE])
+  }
+
+  get_complex_detected <- function(count_mat, genes, cells) {
+    genes_use <- intersect(genes, rownames(count_mat))
+
+    if (length(genes_use) == 0) {
+      return(rep(NA, length(cells)))
+    }
+
+    colSums(count_mat[genes_use, cells, drop = FALSE] > 0) == length(genes_use)
+  }
+
+  get_mean_by_celltype <- function(mat, genes) {
+    genes_use <- intersect(genes, rownames(mat))
+
+    if (length(genes_use) == 0) {
+      out <- rep(NA_real_, length(all_cell_types))
+      names(out) <- all_cell_types
+      return(out)
+    }
+
+    expr_vec <- colMeans(mat[genes_use, , drop = FALSE])
+    mean_by_type <- tapply(expr_vec, cell_type, mean, na.rm = TRUE)
+
+    out <- rep(0, length(all_cell_types))
+    names(out) <- all_cell_types
+    out[names(mean_by_type)] <- mean_by_type
+
+    out
+  }
+
+  lapply(seq_len(nrow(pairs)), function(i) {
+    ligand <- pairs$ligand[i]
+    receptor <- pairs$receptor[i]
+    lr_complex <- pairs$lr_complex[i]
+
+    ligand_genes <- unlist(strsplit(ligand, "_"))
+    receptor_genes <- unlist(strsplit(receptor, "_"))
+
+    ligand_expr_source <- get_complex_expr(expr_norm, ligand_genes, source_cells)
+    receptor_expr_target <- get_complex_expr(expr_norm, receptor_genes, target_cells)
+
+    ligand_detected_source <- get_complex_detected(expr_counts, ligand_genes, source_cells)
+    receptor_detected_target <- get_complex_detected(expr_counts, receptor_genes, target_cells)
+
+    ligand_mean_source <- mean(ligand_expr_source, na.rm = TRUE)
+    receptor_mean_target <- mean(receptor_expr_target, na.rm = TRUE)
+
+    ligand_detected_fraction_source <- mean(ligand_detected_source, na.rm = TRUE)
+    receptor_detected_fraction_target <- mean(receptor_detected_target, na.rm = TRUE)
+
+    ligand_by_type <- get_mean_by_celltype(expr_norm, ligand_genes)
+    receptor_by_type <- get_mean_by_celltype(expr_norm, receptor_genes)
+
+    ligand_specificity_source <- ligand_by_type[source_type] / sum(ligand_by_type, na.rm = TRUE)
+    receptor_specificity_target <- receptor_by_type[target_type] / sum(receptor_by_type, na.rm = TRUE)
+
+    pair_expression_score <- sqrt(ligand_mean_source * receptor_mean_target)
+    pair_detected_score <- sqrt(
+      ligand_detected_fraction_source * receptor_detected_fraction_target
+    )
+    pair_specificity_score <- sqrt(
+      ligand_specificity_source * receptor_specificity_target
+    )
+
+    data.frame(
+      dataset = dataset_name,
+      lr_complex = lr_complex,
+      ligand_expr_source = ligand_mean_source,
+      receptor_expr_target = receptor_mean_target,
+      pair_expr_score = pair_expression_score,
+      ligand_detected_fraction_source = ligand_detected_fraction_source,
+      receptor_detected_fraction_target = receptor_detected_fraction_target,
+      pair_detected_score = pair_detected_score,
+      pair_specificity_score = pair_specificity_score
+    )
+  }) %>%
+    bind_rows()
+}
+```
+
+```{r make-manual-expression-table}
+make_manual_expression_table <- function(
+    objects,
+    dataset_info,
+    selected_lr_manual,
+    source_type,
+    target_type,
+    assay = "Xenium",
+    celltype_col = "CellTypeManual.l2"
+) {
+  # Run manual expression support and return one row per LR pair.
+  manual_expression_long <- lapply(seq_len(nrow(dataset_info)), function(i) {
+    dataset_name <- dataset_info$dataset[i]
+    dataset_short <- dataset_info$dataset_short[i]
+
+    calculate_manual_lr_expression(
+      objects[[dataset_name]],
+      dataset_name = dataset_name,
+      pairs = selected_lr_manual,
+      assay = assay,
+      celltype_col = celltype_col,
+      source_type = source_type,
+      target_type = target_type
+    ) %>%
+      mutate(dataset_short = dataset_short, .before = 1)
+  }) %>%
+    bind_rows()
+
+  manual_expression_wide <- manual_expression_long %>%
+    select(-dataset) %>%
+    pivot_wider(
+      id_cols = lr_complex,
+      names_from = dataset_short,
+      values_from = c(
+        ligand_expr_source,
+        receptor_expr_target,
+        pair_expr_score,
+        ligand_detected_fraction_source,
+        receptor_detected_fraction_target,
+        pair_detected_score,
+        pair_specificity_score
+      ),
+      names_glue = "{dataset_short}_{.value}"
+    )
+
+  manual_expression_table <- manual_expression_wide %>%
+    left_join(
+      selected_lr_manual %>% select(lr_complex, pair_order),
+      by = "lr_complex"
+    )
+
+  if (all(c("control_pair_expr_score", "disease_pair_expr_score") %in% names(manual_expression_table))) {
+    manual_expression_table <- manual_expression_table %>%
+      mutate(
+        pair_expr_log2FC_disease_vs_control = log2(
+          (disease_pair_expr_score + 1e-6) /
+            (control_pair_expr_score + 1e-6)
+        )
+      )
+  }
+
+  manual_expression_table %>%
+    arrange(pair_order) %>%
+    select(
+      lr_complex,
+      ends_with("_ligand_expr_source"),
+      ends_with("_receptor_expr_target"),
+      ends_with("_pair_expr_score"),
+      any_of("pair_expr_log2FC_disease_vs_control"),
+      ends_with("_ligand_detected_fraction_source"),
+      ends_with("_receptor_detected_fraction_target"),
+      ends_with("_pair_detected_score"),
+      ends_with("_pair_specificity_score")
+    )
+}
+```
+
+```{r plot-manual-expression}
+plot_manual_expression <- function(
+    manual_expression_table,
+    dataset_info,
+    source_type,
+    target_type
+) {
+  # Plot manual expression support and label each LR pair with its log2 fold change.
+  pair_order <- manual_expression_table %>%
+    arrange(
+      if_else(pair_expr_log2FC_disease_vs_control <= 0, 0L, 1L),
+      if_else(
+        pair_expr_log2FC_disease_vs_control <= 0,
+        pair_expr_log2FC_disease_vs_control,
+        -pair_expr_log2FC_disease_vs_control
+      ),
+      lr_complex
+    ) %>%
+    pull(lr_complex)
+
+  manual_plot_data <- lapply(seq_len(nrow(dataset_info)), function(i) {
+    dataset_name <- dataset_info$dataset[i]
+    dataset_short <- dataset_info$dataset_short[i]
+
+    expression_col <- paste0(dataset_short, "_pair_expr_score")
+
+    manual_expression_table %>%
+      transmute(
+        lr_complex,
+        dataset = dataset_name,
+        pair_expr_score = .data[[expression_col]],
+        pair_expr_log2FC_disease_vs_control = pair_expr_log2FC_disease_vs_control
+      )
+  }) %>%
+    bind_rows() %>%
+    mutate(
+      dataset = factor(dataset, levels = dataset_info$dataset),
+      lr_complex = factor(lr_complex, levels = pair_order)
+    )
+
+  label_offset <- max(manual_plot_data$pair_expr_score, na.rm = TRUE) * 0.05
+  if (!is.finite(label_offset) || label_offset == 0) {
+    label_offset <- 0.05
+  }
+
+  fc_label_data <- manual_plot_data %>%
+    group_by(lr_complex) %>%
+    summarise(
+      pair_expr_score = max(c(pair_expr_score, 0), na.rm = TRUE) + label_offset,
+      pair_expr_log2FC_disease_vs_control = {
+        logfc_values <- pair_expr_log2FC_disease_vs_control[
+          !is.na(pair_expr_log2FC_disease_vs_control)
+        ]
+        if (length(logfc_values) == 0) NA_real_ else logfc_values[1]
+      },
+      .groups = "drop"
+    ) %>%
+    mutate(
+      fc_label = ifelse(
+        is.na(pair_expr_log2FC_disease_vs_control),
+        NA_character_,
+        sprintf("%.2f", pair_expr_log2FC_disease_vs_control)
+      )
+    )
+
+  ggplot(
+    manual_plot_data,
+    aes(
+      x = lr_complex,
+      y = pair_expr_score,
+      fill = dataset
+    )
+  ) +
+    geom_col(
+      position = position_dodge(width = 0.8),
+      width = 0.7,
+      colour = "black"
+    ) +
+    geom_text(
+      data = fc_label_data,
+      aes(
+        x = lr_complex,
+        y = pair_expr_score,
+        label = fc_label
+      ),
+      inherit.aes = FALSE,
+      vjust = -0.2,
+      size = 3
+    ) +
+    labs(
+      title = paste(
+        "Manual expression support for selected",
+        source_type,
+        "->",
+        target_type,
+        "LR pairs"
+      ),
+      x = "Ligand-receptor pair",
+      y = "Pair expression score",
+      fill = "Dataset"
+    ) +
+    scale_y_continuous(
+      expand = expansion(mult = c(0, 0.25))
+    ) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+}
+```
+
+## Run analysis
+
+```{r load-data}
+spatial_objects <- load_spatial_objects(dataset_info)
+```
+
+```{r counts-preview}
+expr_counts <- GetAssayData(
+  spatial_objects[["Control FVB"]],
+  assay = assay_name,
+  layer = "counts"
+)
+
+expr_counts[1:5, 1:5]
+```
+
+```{r prepare-objects}
+spatial_objects <- lapply(
+  spatial_objects,
+  prepare_spatial_object,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+```
+
+```{r check-identities}
+lapply(spatial_objects, function(obj) table(Idents(obj)))
+```
+
+```{r build-custom-liana-resource}
+custom_lr <- make_custom_liana_resource(custom_liana_pairs)
+
+check_custom_liana_resource(custom_lr, custom_liana_pairs)
+```
+
+```{r run-liana}
+liana_results <- run_liana_all(
+  spatial_objects,
+  custom_lr = custom_lr,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+liana_by_dataset <- liana_results$by_dataset
+liana_all <- liana_results$all
+
+lapply(liana_by_dataset, glimpse)
+```
+
+```{r top-direction-table}
+liana_evt_endo_top20 <- make_direction_top_table(
+  liana_all,
+  source_type = source_type,
+  target_type = target_type,
+  top_n = 20
+)
+
+liana_evt_endo_top20
+```
+
+```{r overall-heatmaps}
+control_heat_plot <- plot_liana_heat_frequency(
+  liana_by_dataset[["Control FVB"]],
+  sig_cutoff = sig_cutoff
+) +
+  ggtitle("Control FVB: LIANA heat frequency")
+
+disease_heat_plot <- plot_liana_heat_frequency(
+  liana_by_dataset[["Disease FAM"]],
+  sig_cutoff = sig_cutoff
+) +
+  ggtitle("Disease FAM: LIANA heat frequency")
+
+control_heat_plot
+disease_heat_plot
+```
+
+```{r direction-comparison-table}
+evt_to_endo_compare <- make_direction_comparison_table(
+  liana_all,
+  dataset_info,
+  source_type = source_type,
+  target_type = target_type,
+  sig_cutoff = sig_cutoff
+)
+
+evt_to_endo_compare
+```
+
+```{r expression-support-table}
+evt_to_endo_presence <- make_direction_presence_table(
+  liana_all,
+  dataset_info,
+  source_type = source_type,
+  target_type = target_type,
+  sig_cutoff = sig_cutoff
+)
+
+evt_to_endo_expression_table <- make_expression_table(
+  spatial_objects,
+  dataset_info,
+  evt_to_endo_presence,
+  source_type = source_type,
+  target_type = target_type,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+
+evt_to_endo_expression_table
+```
+
+```{r selected-liana-dotplots-run}
+selected_liana_dotplots <- make_selected_liana_dotplots(
+  liana_all,
+  selected_pairs,
+  source_type = source_type,
+  target_type = target_type,
+  dataset_info = dataset_info
+)
+
+control_selected_liana_dotplot <- selected_liana_dotplots[["Control FVB"]] +
+  ggtitle("Control FVB: eEVT to Endothelial selected LR interactions")
+
+disease_selected_liana_dotplot <- selected_liana_dotplots[["Disease FAM"]] +
+  ggtitle("Disease FAM: eEVT to Endothelial selected LR interactions")
+
+control_selected_liana_dotplot
+disease_selected_liana_dotplot
+```
+
+```{r selected-expression-bar-plot}
+evt_to_endo_bar_data <- make_expression_bar_data(
+  evt_to_endo_expression_table,
+  dataset_info,
+  selected_pairs = selected_pairs
+)
+
+evt_to_endo_bar_plot <- plot_expression_bar(
+  evt_to_endo_bar_data,
+  source_type = source_type,
+  target_type = target_type
+) +
+  ggtitle("eEVT to Endothelial selected LR expression")
+
+evt_to_endo_bar_plot
+```
+
+```{r manual-expression-table}
+manual_lr_expression <- make_manual_expression_table(
+  spatial_objects,
+  dataset_info,
+  selected_lr_manual,
+  source_type = source_type,
+  target_type = target_type,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+
+manual_lr_expression
+```
+
+```{r manual-expression-plot}
+manual_expression_plot <- plot_manual_expression(
+  manual_lr_expression,
+  dataset_info,
+  source_type = source_type,
+  target_type = target_type
+) +
+  ggtitle("Control FVB vs Disease FAM: manual selected LR expression")
+
+manual_expression_plot
+```
+
+## Endothelial to eEVT
+
+```{r endo-to-eevt-analysis}
+endo_to_evt_results <- run_direction_expression_analysis(
+  spatial_objects,
+  liana_all,
+  dataset_info,
+  source_type = "Endothelial",
+  target_type = "eEVT",
+  sig_cutoff = sig_cutoff,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+```
+
+```{r endo-to-eevt-expression-table}
+endo_to_evt_results$expression_table
+```
+
+```{r endo-to-eevt-bar-plot}
+endo_to_evt_bar_plot <- endo_to_evt_results$bar_plot +
+  ggtitle("Control FVB vs Disease FAM: Endothelial to eEVT selected LR expression")
+
+endo_to_evt_bar_plot
+```
+
+## eEVT to eEVT
+
+```{r eevt-to-eevt-analysis}
+eevt_to_eevt_results <- run_direction_expression_analysis(
+  spatial_objects,
+  liana_all,
+  dataset_info,
+  source_type = "eEVT",
+  target_type = "eEVT",
+  sig_cutoff = sig_cutoff,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+```
+
+```{r eevt-to-eevt-expression-table}
+eevt_to_eevt_results$expression_table
+```
+
+```{r eevt-to-eevt-bar-plot}
+eevt_to_eevt_bar_plot <- eevt_to_eevt_results$bar_plot +
+  ggtitle("Control FVB vs Disease FAM: eEVT to eEVT selected LR expression")
+
+eevt_to_eevt_bar_plot
+```
+
+## Addition: k3 datasets
+
+```{r addition-k3-settings}
+addition_dataset_info <- tibble::tibble(
+  dataset = c("Control FVB eEVT Endo k3", "Disease FAM eEVT Endo k3"),
+  dataset_short = c("control", "disease"),
+  file = c(
+    "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/obj_control_fvb_evt_endo_k3.rds",
+    "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/obj_disease_fam_evt_endo_k3.rds"
+  )
+)
+```
+
+```{r addition-k3-load-data}
+addition_spatial_objects <- load_spatial_objects(addition_dataset_info)
+
+addition_spatial_objects <- lapply(
+  addition_spatial_objects,
+  prepare_spatial_object,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+```
+
+```{r addition-k3-run-liana}
+addition_liana_results <- run_liana_all(
+  addition_spatial_objects,
+  custom_lr = custom_lr,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+addition_liana_by_dataset <- addition_liana_results$by_dataset
+addition_liana_all <- addition_liana_results$all
+```
+
+```{r addition-k3-top-direction-table}
+addition_liana_evt_endo_top20 <- make_direction_top_table(
+  addition_liana_all,
+  source_type = source_type,
+  target_type = target_type,
+  top_n = 20
+)
+
+addition_liana_evt_endo_top20
+```
+
+```{r addition-k3-overall-heatmaps}
+addition_control_heat_plot <- plot_liana_heat_frequency(
+  addition_liana_by_dataset[["Control FVB eEVT Endo k3"]],
+  sig_cutoff = sig_cutoff
+) +
+  ggtitle("Addition k3 Control FVB: LIANA heat frequency")
+
+addition_disease_heat_plot <- plot_liana_heat_frequency(
+  addition_liana_by_dataset[["Disease FAM eEVT Endo k3"]],
+  sig_cutoff = sig_cutoff
+) +
+  ggtitle("Addition k3 Disease FAM: LIANA heat frequency")
+
+addition_control_heat_plot
+addition_disease_heat_plot
+```
+
+```{r addition-k3-direction-comparison-table}
+addition_evt_to_endo_compare <- make_direction_comparison_table(
+  addition_liana_all,
+  addition_dataset_info,
+  source_type = source_type,
+  target_type = target_type,
+  sig_cutoff = sig_cutoff
+)
+
+addition_evt_to_endo_compare
+```
+
+```{r addition-k3-expression-support-table}
+addition_evt_to_endo_presence <- make_direction_presence_table(
+  addition_liana_all,
+  addition_dataset_info,
+  source_type = source_type,
+  target_type = target_type,
+  sig_cutoff = sig_cutoff
+)
+
+addition_evt_to_endo_expression_table <- make_expression_table(
+  addition_spatial_objects,
+  addition_dataset_info,
+  addition_evt_to_endo_presence,
+  source_type = source_type,
+  target_type = target_type,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+
+addition_evt_to_endo_expression_table
+```
+
+```{r addition-k3-selected-expression-bar-plot}
+addition_jag_notch_expression_pairs <- tibble::tibble(
+  ligand.complex = c("JAG1", "JAG1"),
+  receptor.complex = c("NOTCH1", "NOTCH3"),
+  lr_complex = paste(ligand.complex, receptor.complex, sep = " -> ")
+)
+
+addition_evt_to_endo_bar_data <- lapply(seq_len(nrow(addition_dataset_info)), function(i) {
+  dataset_name <- addition_dataset_info$dataset[i]
+  dataset_short <- addition_dataset_info$dataset_short[i]
+
+  calculate_pair_expression_support(
+    addition_spatial_objects[[dataset_name]],
+    addition_jag_notch_expression_pairs,
+    source_type = source_type,
+    target_type = target_type,
+    assay = assay_name,
+    celltype_col = celltype_col
+  ) %>%
+    mutate(
+      dataset = dataset_name,
+      dataset_short = dataset_short,
+      expression_score = pair_expr_score,
+      detected_score = pair_detected_score
+    )
+}) %>%
+  bind_rows()
+
+addition_jag_notch_log2fc <- addition_evt_to_endo_bar_data %>%
+  select(lr_complex, dataset_short, expression_score) %>%
+  tidyr::pivot_wider(names_from = dataset_short, values_from = expression_score) %>%
+  mutate(
+    pair_expr_log2FC_disease_vs_control = log2((disease + 1e-6) / (control + 1e-6))
+  ) %>%
+  select(lr_complex, pair_expr_log2FC_disease_vs_control)
+
+addition_evt_to_endo_bar_data <- addition_evt_to_endo_bar_data %>%
+  left_join(addition_jag_notch_log2fc, by = "lr_complex") %>%
+  mutate(
+    dataset = factor(dataset, levels = addition_dataset_info$dataset),
+    lr_complex = factor(lr_complex, levels = addition_jag_notch_expression_pairs$lr_complex)
+  )
+
+addition_evt_to_endo_bar_plot <- plot_expression_bar(
+  addition_evt_to_endo_bar_data,
+  source_type = source_type,
+  target_type = target_type
+)
+
+addition_evt_to_endo_bar_plot
+```
+
+```{r addition-k3-endo-to-eevt-analysis}
+addition_endo_to_evt_results <- run_direction_expression_analysis(
+  addition_spatial_objects,
+  addition_liana_all,
+  addition_dataset_info,
+  source_type = "Endothelial",
+  target_type = "eEVT",
+  sig_cutoff = sig_cutoff,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+```
+
+```{r addition-k3-endo-to-eevt-expression-table}
+addition_endo_to_evt_results$expression_table
+```
+
+```{r addition-k3-endo-to-eevt-bar-plot}
+addition_endo_to_evt_bar_plot <- addition_endo_to_evt_results$bar_plot +
+  ggtitle("Addition k3: Endothelial to eEVT selected LR expression")
+
+addition_endo_to_evt_bar_plot
+```
+
+```{r addition-k3-eevt-to-eevt-analysis}
+addition_eevt_to_eevt_results <- run_direction_expression_analysis(
+  addition_spatial_objects,
+  addition_liana_all,
+  addition_dataset_info,
+  source_type = "eEVT",
+  target_type = "eEVT",
+  sig_cutoff = sig_cutoff,
+  assay = assay_name,
+  celltype_col = celltype_col
+)
+```
+
+```{r addition-k3-eevt-to-eevt-expression-table}
+addition_eevt_to_eevt_results$expression_table
+```
+
+```{r addition-k3-eevt-to-eevt-bar-plot}
+addition_eevt_to_eevt_bar_plot <- addition_eevt_to_eevt_results$bar_plot +
+  ggtitle("Addition k3: eEVT to eEVT selected LR expression")
+
+addition_eevt_to_eevt_bar_plot
+```
+```{r}
+
+addition_evt_to_endo_bar_plot
+eevt_to_eevt_bar_plot
+addition_eevt_to_eevt_bar_plot
+endo_to_evt_bar_plot
+addition_endo_to_evt_bar_plot
+```
