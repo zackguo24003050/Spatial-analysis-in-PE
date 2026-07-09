@@ -133,7 +133,12 @@ CellChatDB_use <- SpatialCellChat::subsetDB(
   non_protein = FALSE
 )
 ```
+
 Pre-processing the expression data for cell-cell communication analysis
+Only keep contact signalling
+Only keep genes in LR database.
+Retain genes detected in at least 10 cells
+Normally only spatially variable genes will be retain, but for Xenium data that has relatively small panel, we skip this
 ```{r,eval=FALSE}
 # 1. Select the human Cell-Cell Contact database
 CellChatDB <- CellChatDB.human
@@ -169,7 +174,7 @@ features_small_panel <- names(
 
 
 # 5. Run SpatialCellChat preprocessing
-# This performs ALRA preprocessing on the signalling-expression matrix
+# This performs ALRA preprocessing on the signalling-expression matrix to make it compatible for spatial cellchat function
 chat_control_fvb <- preProcessing(chat_control_fvb)
 
 
@@ -194,8 +199,9 @@ chat_control_fvb <- identifyOverExpressedInteractions(
   variable.both = FALSE
 )
 ```
+
 Part II: Inference of cell-cell communication network
-Compute the communication probability and infer cellular communication network at the individual cell level
+Compute the communication probability and infer cellular communication network at the individual cell level(L-R)
 ```{r expensive-computation, eval=FALSE}
 # Check the retained ligand-receptor pairs
 nrow(chat_control_fvb@LR$LRsig)
@@ -203,7 +209,7 @@ nrow(chat_control_fvb@LR$LRsig)
 # Confirm that the current analysis contains only contact signalling
 unique(chat_control_fvb@LR$LRsig$annotation)
 
-# 1. Compute communication probabilities between individual cells
+# Compute individual-cell LR communication probabilities using spatial distance
 chat_control_fvb <- computeCommunProb(
   chat_control_fvb,
   distance.use = TRUE,
@@ -212,54 +218,16 @@ chat_control_fvb <- computeCommunProb(
   interaction.range = 250,
   contact.range = 20
 )
-
-#Checkpoint
-output_data_dir <- "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data"
-
-dir.create(
-  output_data_dir,
-  recursive = TRUE,
-  showWarnings = FALSE
-)
-
-readr::write_rds(
-  chat_control_fvb,
-  file.path(
-    output_data_dir,
-    "chat_control_fvb_contactRange20_unfiltered.rds"
-  )
-)
 ```
 
+Filtering
 ```{r,eval=FALSE}
-#Load the checkpoint
-chat_control_fvb <- readr::read_rds(
-  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/chat_control_fvb_contactRange20_unfiltered.rds"
-)
-
+# Filter weak or poorly supported individual-cell LR communication links
 chat_control_fvb <- filterProbability(
   chat_control_fvb
 )
 
-chat_control_fvb <- filterCommunication(
-  chat_control_fvb,
-  min.cells = NULL,
-  min.links = 10,
-  min.cells.sr = 10
-)
-```
-
-```{r,eval=FALSE}
-# Load the checkpoint generated after computeCommunProb()
-chat_control_fvb <- readr::read_rds(
-  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/chat_control_fvb_contactRange20_unfiltered.rds"
-)
-
-# Filter the individual-cell LR communication network
-chat_control_fvb <- filterProbability(
-  chat_control_fvb
-)
-
+# Keep only communication events with sufficient cell-cell link support
 chat_control_fvb <- filterCommunication(
   chat_control_fvb,
   min.cells = NULL,
@@ -270,6 +238,7 @@ chat_control_fvb <- filterCommunication(
 
 Calculate group-level LR communication probability
 ```{r,eval=FALSE}
+# Average filtered individual-cell LR probabilities into source-target cell-group LR probabilities
 chat_control_fvb <- computeAvgCommunProb(
   chat_control_fvb,
   avg.type = "avg",
@@ -280,6 +249,7 @@ chat_control_fvb <- computeAvgCommunProb(
   seed.use = 1L
 )
 
+# Remove group-level LR communications involving cell groups with fewer than 10 cells
 chat_control_fvb <- filterCommunication(
   chat_control_fvb,
   min.cells = 10,
@@ -288,7 +258,7 @@ chat_control_fvb <- filterCommunication(
 )
 ```
 
-Infer communication at signaling-pathway level
+Infer communication at signaling-pathway level at cell group level
 ```{r,eval=FALSE}
 chat_control_fvb <- computeCommunProbPathway(
   chat_control_fvb,
@@ -300,12 +270,14 @@ chat_control_fvb <- computeCommunProbPathway(
 
 Calculate the aggregated communication network
 ```{r,eval=FALSE}
+# Aggregate LR/pathway communication probabilities into cell-group-level count and weight networks
 chat_control_fvb <- aggregateNet(
   chat_control_fvb
 )
 ```
 
 Compute network centrality scores
+Signalling role of each cell type. Sender? Receiver?
 ```{r,eval=FALSE}
 chat_control_fvb <- SpatialCellChat::netAnalysis_computeCentrality(
   chat_control_fvb,
@@ -326,6 +298,26 @@ chat_control_fvb <- SpatialCellChat::netAnalysis_computeCentrality(
   slot.name = "netP",
   do.group = TRUE,
   degree.only = TRUE
+)
+```
+
+Save rds
+```{r}
+# Save the final processed SpatialCellChat object
+output_data_dir <- "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data"
+
+dir.create(
+  output_data_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+readr::write_rds(
+  chat_control_fvb,
+  file.path(
+    output_data_dir,
+    "chat_control_fvb_contactRange20_final.rds"
+  )
 )
 ```
 
