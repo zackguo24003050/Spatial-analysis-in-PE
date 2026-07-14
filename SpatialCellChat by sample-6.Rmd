@@ -1,0 +1,602 @@
+---
+title: "Six Donor"
+author:
+- name: Zack Guo
+  affiliation: UCL Institute of Child Health
+  email: wegmzgu@ucl.ac.uk
+date: "`r format(Sys.time(), '%B %e, %Y')`"
+output:
+  html_document:
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: '5'
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Load the library
+```{r}
+library(SpatialCellChat)
+library(Matrix)
+library(patchwork)
+library(dplyr)
+library(ggplot2)
+library(Seurat)
+options(stringsAsFactors = F)
+
+# SpatialCellChat progressr workaround for R Markdown
+future::plan("sequential")
+```
+
+#Read six sample RDS, where there are two control and six diseases
+```{r}
+obj_six <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_six_donors_Myometrium.rds"
+)
+
+# Check metadata columns
+colnames(obj_six@meta.data)
+
+# Check assay names
+Assays(obj_six)
+
+# Set Xenium as default assay
+DefaultAssay(obj_six) <- "Xenium"
+
+#Check number of cells from each donor
+sample_col <- "donor"
+
+table(obj_six@meta.data[[sample_col]])
+```
+#Function for all calculation in SpatialCellChat
+```{r}
+run_contact_cellchat_one_sample <- function(dataset, signaling.type) {
+  
+  ###Part I: Data input & processing and initialization of Spatial CellChat object
+  
+  
+  ##Load the data
+  
+  #Load RDS
+  obj_control_fvb <- dataset
+  
+  # Set Xenium as the active assay
+  DefaultAssay(obj_control_fvb) <- "Xenium"
+  
+  # Generate normalized log-expression data
+  obj_control_fvb <- NormalizeData(
+    obj_control_fvb,
+    assay = "Xenium",
+    normalization.method = "LogNormalize",
+    scale.factor = 10000,
+    verbose = FALSE
+  )
+  
+  #Prepare spatial coordinates of cells
+  spatial.locs_control_fvb <- obj_control_fvb@meta.data[
+    colnames(obj_control_fvb),
+    c("centroid_X_1", "centroid_X_2"),
+    drop = FALSE
+  ]
+  
+  #Change name of columns to x and y
+  colnames(spatial.locs_control_fvb) <- c("x", "y")
+  
+  #Define Xenium spatial factor. The spatial factor is already 1 so the conversion factor is just 1.
+  conversion.factor <- 1
+  spot.size <- 10
+  
+  #$tol=5 means it allows a 5 μm tolerance when defining spatial proximity.
+  spatial.factors_control_fvb <- list(
+    ratio = conversion.factor,
+    tol = spot.size/2
+  )
+  
+  
+  ##Create a Spatial CellChat object
+  
+  chat_control_fvb <- createSpatialCellChat(
+    object = obj_control_fvb,                  # Xenium Seurat object
+    group.by = "CellTypeManual.l2",            # cell-type annotation
+    assay = "Xenium",                          # normalized Xenium assay
+    datatype = "spatial",
+    coordinates = spatial.locs_control_fvb,    # cell centroid coordinates
+    spatial.factors = spatial.factors_control_fvb
+  )
+  
+  # Inspect the SpatialCellChat object
+  chat_control_fvb
+  
+  # Check cell identities used in the analysis. x_cent/y_cent means x/y coordinate of cell centroid.
+  table(chat_control_fvb@idents)
+  
+  
+  ##Set the ligand-receptor interaction database
+  
+  custom_lr_clec11a_kit <- data.frame(
+    ligand = "CLEC11A",
+    receptor = "KIT",
+    
+    # Assign an individual pathway name so that the pair can be
+    # retained in pathway-level CellChat analysis
+    pathway_name = "CLEC11A",
+    
+    interaction_name = "CLEC11A_KIT",
+    interaction_name_2 = "CLEC11A - KIT",
+    
+    # CLEC11A is treated as a soluble ligand
+    annotation = "Secreted Signaling",
+    
+    evidence = paste(
+      "NicheNet-predicted EVT-to-artery interaction;",
+      "Greenbaum et al., Nature 2023, Fig. 6h;",
+      "doi:10.1038/s41586-023-06298-9"
+    ),
+    
+    stringsAsFactors = FALSE
+  )
+  
+  # Merge the custom pair with the built-in human CellChat database
+  CellChatDB_custom <- SpatialCellChat::updateCellChatDB(
+    db = custom_lr_clec11a_kit,
+    merged = TRUE,
+    species_target = "human"
+  )
+  
+  CellChatDB_use <- SpatialCellChat::subsetDB(
+    CellChatDB_custom,
+    search = c(
+      "Secreted Signaling",
+      "ECM-Receptor",
+      "Cell-Cell Contact"
+    ),
+    non_protein = FALSE
+  )
+  
+  
+  ##Pre-processing the expression data for cell-cell communication analysis
+  
+  # Only keep contact signalling
+  # Only keep genes in LR database.
+  # Retain genes detected in at least 10 cells
+  # Normally only spatially variable genes will be retain, but for Xenium data that has relatively small panel, we skip this
+  
+  
+  # Select the human Cell-Cell Contact database
+  CellChatDB <- CellChatDB.human
+  
+  CellChatDB_contact <- subsetDB(
+    CellChatDB,
+    search = "Cell-Cell Contact",
+    non_protein = FALSE
+  )
+  
+  CellChatDB_secreted <- subsetDB(
+    CellChatDB_custom,
+    search = "Secreted Signaling",
+    non_protein = FALSE
+  )
+  
+  CellChatDB_selected <- switch(
+    signaling.type,
+    contact = CellChatDB_contact,
+    secreted = CellChatDB_secreted
+  )
+  
+  # Assign the selected database to the SpatialCellChat object
+  chat_control_fvb@DB <- CellChatDB_selected
+  
+  
+  # Subset expression data to signalling genes
+  # This step is required even when using the whole database
+  chat_control_fvb <- subsetData(chat_control_fvb)
+  
+  
+  # Count how many cells express each signalling gene
+  # Do this BEFORE preProcessing/ALRA imputation
+  n_cells_expressed <- Matrix::rowSums(
+    chat_control_fvb@data.signaling > 0
+  )
+  
+  
+  # Retain genes detected in at least 10 cells
+  min_cells_gene <- 10
+  
+  features_small_panel <- names(
+    n_cells_expressed[n_cells_expressed >= min_cells_gene]
+  )
+  
+  
+  # Run SpatialCellChat preprocessing
+  # This performs ALRA preprocessing on the signalling-expression matrix to make it compatible for spatial cellchat function
+  chat_control_fvb <- preProcessing(chat_control_fvb)
+  
+  
+  # Manually assign the genes retained for the small Xenium panel
+  # This replaces identifyOverExpressedGenes()
+  chat_control_fvb@var.features[["features"]] <- features_small_panel
+  
+  chat_control_fvb@var.features[["features.info"]] <- data.frame(
+    features = names(n_cells_expressed),
+    n_cells_expressed = as.numeric(n_cells_expressed),
+    selected = n_cells_expressed >= min_cells_gene,
+    row.names = names(n_cells_expressed),
+    stringsAsFactors = FALSE
+  )
+  
+  
+  # Identify available ligand-receptor interactions
+  # variable.both = FALSE means either the ligand or receptor must pass
+  # the >=10-cell filter, while all required genes must be in the panel
+  chat_control_fvb <- identifyOverExpressedInteractions(
+    chat_control_fvb,
+    variable.both = FALSE
+  )
+  
+  
+  ###Part II: Inference of cell-cell communication network
+  
+  
+  ##Compute the communication probability and infer cellular communication network at the individual cell level(L-R)
+  
+  # Check the retained ligand-receptor pairs
+  nrow(chat_control_fvb@LR$LRsig)
+  
+  # Confirm that the current analysis contains only contact signalling
+  unique(chat_control_fvb@LR$LRsig$annotation)
+  
+  # Compute individual-cell LR communication probabilities using spatial distance
+  chat_control_fvb <- switch(
+    signaling.type,
+    
+    contact = computeCommunProb(
+      chat_control_fvb,
+      distance.use = TRUE,
+      scale.distance = 0.8,
+      contact.dependent = TRUE,
+      interaction.range = 250,
+      contact.range = 20
+    ),
+    
+    secreted = computeCommunProb(
+      chat_control_fvb,
+      distance.use = TRUE,
+      scale.distance = 0.8,
+      contact.dependent = FALSE,
+      interaction.range = 250
+    )
+  )
+  
+  
+  # Filtering
+  
+  # Filter weak or poorly supported individual-cell LR communication links
+  chat_control_fvb <- filterProbability(
+    chat_control_fvb
+  )
+  
+  # Keep only communication events with sufficient cell-cell link support
+  chat_control_fvb <- filterCommunication(
+    chat_control_fvb,
+    min.cells = NULL,
+    min.links = 10,
+    min.cells.sr = 10
+  )
+  
+  
+  ## Calculate group-level LR communication probability
+  
+  # Average filtered individual-cell LR probabilities into source-target cell-group LR probabilities
+  chat_control_fvb <- computeAvgCommunProb(
+    chat_control_fvb,
+    avg.type = "avg",
+    min.percent = 0.1,
+    min.cells.sr = 10,
+    do.permutation = TRUE,
+    nboot = 100,
+    seed.use = 1L
+  )
+  
+  # Remove group-level LR communications involving cell groups with fewer than 10 cells
+  chat_control_fvb <- filterCommunication(
+    chat_control_fvb,
+    min.cells = 10,
+    min.links = NULL,
+    min.cells.sr = NULL
+  )
+  
+  
+  ##Infer communication at signaling-pathway level at cell group level
+  
+  chat_control_fvb <- computeCommunProbPathway(
+    chat_control_fvb,
+    thresh = 0.05,
+    do.group = TRUE,
+    do.cell = FALSE
+  )
+  
+  
+  ##Calculate the aggregated communication network
+  
+  # Aggregate LR/pathway communication probabilities into cell-group-level count and weight networks
+  chat_control_fvb <- aggregateNet(
+    chat_control_fvb
+  )
+  
+  
+  ##Compute network centrality scores
+  
+  # Signalling role of each cell type. Sender? Receiver?
+  
+  chat_control_fvb <- SpatialCellChat::netAnalysis_computeCentrality(
+    chat_control_fvb,
+    slot.name = "net",
+    do.group = FALSE,
+    degree.only = TRUE
+  )
+  
+  chat_control_fvb <- SpatialCellChat::netAnalysis_computeCentrality(
+    chat_control_fvb,
+    slot.name = "net",
+    do.group = TRUE,
+    degree.only = TRUE
+  )
+  
+  try(
+    chat_control_fvb <- SpatialCellChat::netAnalysis_computeCentrality(
+      chat_control_fvb,
+      slot.name = "netP",
+      do.group = TRUE,
+      degree.only = TRUE
+    ),
+    silent = TRUE
+  )
+  
+  
+  ##Return final SpatialCellChat object
+  
+  return(chat_control_fvb)
+}
+```
+
+#Function for saving RDS
+```{r}
+save_cellchat_one_sample <- function(chat_object, sample_id, signaling.type) {
+  
+  output_data_dir <- "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/single_sample_cellchat"
+  
+  dir.create(
+    output_data_dir,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+  
+  sample_clean <- gsub("[^A-Za-z0-9_\\-]", "_", sample_id)
+  
+  file_suffix <- switch(
+    signaling.type,
+    contact = "contactRange20",
+    secreted = "secreted_range250"
+  )
+  
+  output_file <- file.path(
+    output_data_dir,
+    paste0(
+      "chat_",
+      sample_clean,
+      "_",
+      file_suffix,
+      "_final.rds"
+    )
+  )
+  
+  saveRDS(
+    chat_object,
+    output_file
+  )
+  
+  return(output_file)
+}
+```
+
+#Run for FCM sample
+```{r}
+obj_fcm <- subset(
+  obj_six,
+  subset = donor == "FCM"
+)
+
+chat_fcm_contact <- run_contact_cellchat_one_sample(
+  obj_fcm,
+  signaling.type = "contact"
+)
+
+chat_fcm_secreted <- run_contact_cellchat_one_sample(
+  obj_fcm,
+  signaling.type = "secreted"
+)
+```
+
+# Save FCM contact and secreted objects
+```{r}
+save_cellchat_one_sample(
+  chat_object = chat_fcm_contact,
+  sample_id = "FCM",
+  signaling.type = "contact"
+)
+
+save_cellchat_one_sample(
+  chat_object = chat_fcm_secreted,
+  sample_id = "FCM",
+  signaling.type = "secreted"
+)
+```
+
+# Run for FEP sample
+```{r}
+obj_fep <- subset(
+  obj_six,
+  subset = donor == "FEP"
+)
+
+chat_fep_contact <- run_contact_cellchat_one_sample(
+  obj_fep,
+  signaling.type = "contact"
+)
+
+chat_fep_secreted <- run_contact_cellchat_one_sample(
+  obj_fep,
+  signaling.type = "secreted"
+)
+```
+
+# Save FEP contact and secreted objects
+```{r}
+save_cellchat_one_sample(
+  chat_object = chat_fep_contact,
+  sample_id = "FEP",
+  signaling.type = "contact"
+)
+
+save_cellchat_one_sample(
+  chat_object = chat_fep_secreted,
+  sample_id = "FEP",
+  signaling.type = "secreted"
+)
+```
+
+# Run for FVQ sample
+```{r}
+obj_fvq <- subset(
+  obj_six,
+  subset = donor == "FVQ"
+)
+
+chat_fvq_contact <- run_contact_cellchat_one_sample(
+  obj_fvq,
+  signaling.type = "contact"
+)
+
+chat_fvq_secreted <- run_contact_cellchat_one_sample(
+  obj_fvq,
+  signaling.type = "secreted"
+)
+```
+
+# Save FVQ contact and secreted objects
+```{r}
+save_cellchat_one_sample(
+  chat_object = chat_fvq_contact,
+  sample_id = "FVQ",
+  signaling.type = "contact"
+)
+
+save_cellchat_one_sample(
+  chat_object = chat_fvq_secreted,
+  sample_id = "FVQ",
+  signaling.type = "secreted"
+)
+```
+
+# Run for FVS sample
+```{r}
+obj_fvs <- subset(
+  obj_six,
+  subset = donor == "FVS"
+)
+
+chat_fvs_contact <- run_contact_cellchat_one_sample(
+  obj_fvs,
+  signaling.type = "contact"
+)
+
+chat_fvs_secreted <- run_contact_cellchat_one_sample(
+  obj_fvs,
+  signaling.type = "secreted"
+)
+```
+
+# Save FVS contact and secreted objects
+```{r}
+save_cellchat_one_sample(
+  chat_object = chat_fvs_contact,
+  sample_id = "FVS",
+  signaling.type = "contact"
+)
+
+save_cellchat_one_sample(
+  chat_object = chat_fvs_secreted,
+  sample_id = "FVS",
+  signaling.type = "secreted"
+)
+```
+# Run for FVB sample
+```{r}
+obj_fvb <- subset(
+  obj_six,
+  subset = donor == "FVB"
+)
+
+chat_fvb_contact <- run_contact_cellchat_one_sample(
+  obj_fvb,
+  signaling.type = "contact"
+)
+
+chat_fvb_secreted <- run_contact_cellchat_one_sample(
+  obj_fvb,
+  signaling.type = "secreted"
+)
+```
+
+# Save FVB contact and secreted objects
+```{r}
+save_cellchat_one_sample(
+  chat_object = chat_fvb_contact,
+  sample_id = "FVB",
+  signaling.type = "contact"
+)
+
+save_cellchat_one_sample(
+  chat_object = chat_fvb_secreted,
+  sample_id = "FVB",
+  signaling.type = "secreted"
+)
+```
+
+# Run for FAM sample
+```{r}
+obj_fam <- subset(
+  obj_six,
+  subset = donor == "FAM"
+)
+
+chat_fam_contact <- run_contact_cellchat_one_sample(
+  obj_fam,
+  signaling.type = "contact"
+)
+
+chat_fam_secreted <- run_contact_cellchat_one_sample(
+  obj_fam,
+  signaling.type = "secreted"
+)
+```
+
+# Save FAM contact and secreted objects
+```{r}
+save_cellchat_one_sample(
+  chat_object = chat_fam_contact,
+  sample_id = "FAM",
+  signaling.type = "contact"
+)
+
+save_cellchat_one_sample(
+  chat_object = chat_fam_secreted,
+  sample_id = "FAM",
+  signaling.type = "secreted"
+)
+```
+
