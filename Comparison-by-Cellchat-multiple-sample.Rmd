@@ -1,0 +1,978 @@
+---
+title: "Comparison by Cellchat - multiple sample"
+author: "Zack"
+date: "2026-06-14"
+output: html_document
+---
+
+```{r}
+library(SpatialCellChat)
+library(CellChat)
+library(patchwork)
+library(ggplot2)
+```
+
+# load calculated rds
+
+```{r}
+# Contact-dependent objects
+chat_control_fvb <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat/cellchat_control_multi_contactRange20_final.rds"
+)
+
+chat_disease_fam <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat/cellchat_disease_multi_contactRange20_final.rds"
+)
+
+# Secreted-signaling objects
+chat_control_fvb_secreted <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat/cellchat_control_multi_secreted_range250_final.rds"
+)
+
+chat_disease_fam_secreted <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat/cellchat_disease_multi_secreted_range250_final.rds"
+)
+```
+
+# Merge
+
+```{r}
+object.list.contact <- list(
+  Control = chat_control_fvb,
+  Disease = chat_disease_fam
+)
+object.list.secreted <- list(
+  Control = chat_control_fvb_secreted,
+  Disease = chat_disease_fam_secreted
+)
+cellchat.contact <- mergeSpatialCellChat(
+  object.list.contact,
+  add.names = names(object.list.contact),
+  cell.prefix = TRUE
+)
+```
+
+# Compare the total number of interactions and interaction strength contact
+
+```{r}
+gg1_contact <- compareInteractions(
+  cellchat.contact,
+  show.legend = FALSE,
+  group = c(1, 2)
+)
+
+gg2_contact <- compareInteractions(
+  cellchat.contact,
+  show.legend = FALSE,
+  group = c(1, 2),
+  measure = "weight"
+)
+
+gg1_contact
+gg2_contact
+```
+
+```{r}
+gg1_secreted <- compareInteractions(
+  cellchat.secreted,
+  show.legend = FALSE,
+  group = c(1, 2)
+)
+
+gg2_secreted <- compareInteractions(
+  cellchat.secreted,
+  show.legend = FALSE,
+  group = c(1, 2),
+  measure = "weight"
+)
+
+gg1_secreted + gg2_secreted
+```
+
+```{r}
+gg1_contact <- netVisual_heatmap(cellchat.contact)
+```
+
+```{r}
+gg2_contact <- netVisual_heatmap(cellchat.contact, measure = "weight")
+```
+
+secreted
+
+```{r}
+gg1_secreted <- netVisual_heatmap(cellchat.secreted)
+```
+
+```{r}
+gg2_secreted <- netVisual_heatmap(cellchat.secreted, measure = "weight")
+```
+
+# Compare the major sources and targets in a 2D space (A) Identify cell populations with significant changes in sending or receiving signals Contact
+
+```{r}
+num.link.contact <- sapply(
+  object.list.contact,
+  function(x) {
+    rowSums(x@net$count) +
+      colSums(x@net$count) -
+      diag(x@net$count)
+  }
+)
+
+weight.MinMax.contact <- c(
+  min(num.link.contact),
+  max(num.link.contact)
+)
+
+gg.contact.role <- list()
+
+for (i in seq_along(object.list.contact)) {
+  gg.contact.role[[i]] <- SpatialCellChat::netAnalysis_signalingRole_scatter(
+    object.list.contact[[i]],
+    title = names(object.list.contact)[i],
+    weight.MinMax = weight.MinMax.contact,
+    x.measure = "outdeg",
+    y.measure = "indeg"
+  )
+}
+```
+
+```{r}
+patchwork::wrap_plots(plots = gg.contact.role)
+```
+
+```{r}
+num.link.secreted <- sapply(
+  object.list.secreted,
+  function(x) {
+    rowSums(x@net$count) +
+      colSums(x@net$count) -
+      diag(x@net$count)
+  }
+)
+
+weight.MinMax.secreted <- c(
+  min(num.link.secreted),
+  max(num.link.secreted)
+)
+
+gg.secreted.role <- list()
+
+for (i in seq_along(object.list.secreted)) {
+  gg.secreted.role[[i]] <- SpatialCellChat::netAnalysis_signalingRole_scatter(
+    object.list.secreted[[i]],
+    title = names(object.list.secreted)[i],
+    weight.MinMax = weight.MinMax.secreted,
+    x.measure = "outdeg",
+    y.measure = "indeg"
+  )
+}
+```
+
+```{r}
+patchwork::wrap_plots(plots = gg.secreted.role)
+```
+
+# 1. Identify the signaling changes of specific cell populations contact
+
+```{r}
+gg_eevt_contact <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
+  cellchat.contact,
+  idents.use = "eEVT"
+)
+```
+
+```{r}
+gg_endo_contact <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
+  cellchat.contact,
+  idents.use = "Endothelial"
+)
+```
+
+```{r}
+gg_eevt_contact
+```
+
+```{r}
+gg_endo_contact
+```
+
+```{r}
+gg2_eevt_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
+  cellchat.secreted,
+  idents.use = "eEVT"
+)
+```
+
+```{r}
+gg2_endo_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
+  cellchat.secreted,
+  idents.use = "Endothelial"
+)
+```
+
+```{r}
+gg2_eevt_secreted
+```
+
+```{r}
+gg2_endo_secreted
+```
+
+```{r}
+cellchat.contact <- SpatialCellChat::computeNetSimilarityPairwise(
+  cellchat.contact,
+  type = "functional"
+)
+
+cellchat.contact <- SpatialCellChat::netEmbedding(
+  cellchat.contact,
+  type = "functional"
+)
+
+cellchat.contact <- SpatialCellChat::netClustering(
+  cellchat.contact,
+  type = "functional"
+)
+
+SpatialCellChat::netVisual_embeddingPairwise(
+  cellchat.contact,
+  type = "functional",
+  label.size = 3.5
+)
+```
+
+```{r}
+cellchat.contact <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat/cellchat_contact_functional_clustered.rds"
+)
+
+SpatialCellChat::netVisual_embeddingPairwise(
+  cellchat.contact,
+  type = "functional",
+  label.size = 3.5
+)
+```
+
+secreted
+
+```{r}
+cellchat.secreted <- SpatialCellChat::computeNetSimilarityPairwise(
+  cellchat.secreted,
+  type = "functional"
+)
+
+cellchat.secreted <- SpatialCellChat::netEmbedding(
+  cellchat.secreted,
+  type = "functional"
+)
+
+cellchat.secreted <- SpatialCellChat::netClustering(
+  cellchat.secreted,
+  type = "functional"
+)
+
+SpatialCellChat::netVisual_embeddingPairwise(
+  cellchat.secreted,
+  type = "functional",
+  label.size = 3.5
+)
+```
+
+```{r}
+cellchat.secreted <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat/cellchat_secreted_functional_clustered.rds"
+)
+
+SpatialCellChat::netVisual_embeddingPairwise(
+  cellchat.secreted,
+  type = "functional",
+  label.size = 3.5
+)
+```
+
+# Identify signaling groups based on structure similarity contact
+
+```{r}
+cellchat.contact <- SpatialCellChat::computeNetSimilarityPairwise(
+  cellchat.contact,
+  type = "structural"
+)
+
+cellchat.contact <- SpatialCellChat::netEmbedding(
+  cellchat.contact,
+  type = "structural"
+)
+
+cellchat.contact <- SpatialCellChat::netClustering(
+  cellchat.contact,
+  type = "structural"
+)
+
+SpatialCellChat::netVisual_embeddingPairwise(
+  cellchat.contact,
+  type = "structural",
+  label.size = 3.5
+)
+
+SpatialCellChat::netVisual_embeddingPairwiseZoomIn(
+  cellchat.contact,
+  type = "structural",
+  nCol = 2
+)
+```
+
+```{r}
+cellchat.contact <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat/cellchat_contact_structural_clustered.rds"
+)
+
+SpatialCellChat::netVisual_embeddingPairwise(
+  cellchat.contact,
+  type = "structural",
+  label.size = 3.5
+)
+```
+
+```{r}
+SpatialCellChat::netVisual_embeddingPairwiseZoomIn(
+  cellchat.contact,
+  type = "structural",
+  nCol = 2
+)
+```
+
+secreted
+
+```{r}
+cellchat.secreted <- SpatialCellChat::computeNetSimilarityPairwise(
+  cellchat.secreted,
+  type = "structural"
+)
+
+cellchat.secreted <- SpatialCellChat::netEmbedding(
+  cellchat.secreted,
+  type = "structural"
+)
+
+cellchat.secreted <- SpatialCellChat::netClustering(
+  cellchat.secreted,
+  type = "structural"
+)
+
+SpatialCellChat::netVisual_embeddingPairwise(
+  cellchat.secreted,
+  type = "structural",
+  label.size = 3.5
+)
+
+SpatialCellChat::netVisual_embeddingPairwiseZoomIn(
+  cellchat.secreted,
+  type = "structural",
+  nCol = 2
+)
+```
+
+```{r}
+cellchat.secreted <- readr::read_rds(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat/cellchat_secreted_structural_clustered.rds"
+)
+
+SpatialCellChat::netVisual_embeddingPairwise(
+  cellchat.secreted,
+  type = "structural",
+  label.size = 3.5
+)
+```
+
+```{r}
+SpatialCellChat::netVisual_embeddingPairwiseZoomIn(
+  cellchat.secreted,
+  type = "structural",
+  nCol = 2
+)
+```
+
+Compute and visualize the pathway distance in the learned joint manifold contact
+
+```{r}
+CellChat::rankSimilarity(
+  cellchat.contact,
+  type = "functional"
+)
+```
+
+secreted
+
+```{r}
+CellChat::rankSimilarity(
+  cellchat.secreted,
+  type = "functional"
+)
+```
+
+# Identify altered signaling with distinct interaction strength (A) Compare the overall information flow of each signaling pathway or ligand-receptor pair contact
+
+```{r}
+gg1_contact_ranknet <- SpatialCellChat::rankNet(
+  cellchat.contact,
+  mode = "comparison",
+  measure = "weight",
+  sources.use = NULL,
+  targets.use = NULL,
+  stacked = TRUE,
+  do.stat = TRUE
+)
+
+gg2_contact_ranknet <- SpatialCellChat::rankNet(
+  cellchat.contact,
+  mode = "comparison",
+  measure = "weight",
+  sources.use = NULL,
+  targets.use = NULL,
+  stacked = FALSE,
+  do.stat = TRUE
+)
+
+gg1_contact_ranknet + gg2_contact_ranknet
+```
+
+```{r}
+gg1_secreted_ranknet <- SpatialCellChat::rankNet(
+  cellchat.secreted,
+  mode = "comparison",
+  measure = "weight",
+  sources.use = NULL,
+  targets.use = NULL,
+  stacked = TRUE,
+  do.stat = TRUE
+)
+
+gg2_secreted_ranknet <- SpatialCellChat::rankNet(
+  cellchat.secreted,
+  mode = "comparison",
+  measure = "weight",
+  sources.use = NULL,
+  targets.use = NULL,
+  stacked = FALSE,
+  do.stat = TRUE
+)
+
+gg1_secreted_ranknet + gg2_secreted_ranknet
+```
+
+```{r}
+library(ComplexHeatmap)
+```
+
+```{r}
+library(grid)
+
+# Use the first two datasets, following the CellChat tutorial
+i <- 1
+j <- 2
+
+# Combine all identified signaling pathways from the two datasets
+pathway.union.contact <- union(
+  object.list.contact[[i]]@netP$pathways,
+  object.list.contact[[j]]@netP$pathways
+)
+
+# =========================
+# Outgoing signaling
+# =========================
+
+ht_contact_out_1 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.contact[[i]],
+  pattern = "outgoing",
+  signaling = pathway.union.contact,
+  title = names(object.list.contact)[i],
+  width = 5,
+  height = 6
+)
+
+ht_contact_out_2 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.contact[[j]],
+  pattern = "outgoing",
+  signaling = pathway.union.contact,
+  title = names(object.list.contact)[j],
+  width = 5,
+  height = 6
+)
+
+ComplexHeatmap::draw(
+  ht_contact_out_1 + ht_contact_out_2,
+  ht_gap = grid::unit(0.5, "cm")
+)
+```
+
+```{r}
+# =========================
+# Incoming signaling
+# =========================
+
+#There is a lack of significant incoming signal in disease so heatmap cannot be drawn
+
+# =========================
+# Overall signaling
+# outgoing + incoming
+# =========================
+
+ht_contact_all_1 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.contact[[i]],
+  pattern = "all",
+  signaling = pathway.union.contact,
+  title = names(object.list.contact)[i],
+  width = 5,
+  height = 6,
+  color.heatmap = "OrRd"
+)
+
+ht_contact_all_2 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.contact[[j]],
+  pattern = "all",
+  signaling = pathway.union.contact,
+  title = names(object.list.contact)[j],
+  width = 5,
+  height = 6,
+  color.heatmap = "OrRd"
+)
+
+ComplexHeatmap::draw(
+  ht_contact_all_1 + ht_contact_all_2,
+  ht_gap = grid::unit(0.5, "cm")
+)
+```
+
+secreted
+
+```{r}
+library(ComplexHeatmap)
+library(grid)
+
+i <- 1
+j <- 2
+
+pathway.union.secreted <- union(
+  object.list.secreted[[i]]@netP$pathways,
+  object.list.secreted[[j]]@netP$pathways
+)
+
+# =========================
+# Outgoing signaling
+# =========================
+
+ht_secreted_out_1 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.secreted[[i]],
+  pattern = "outgoing",
+  signaling = pathway.union.secreted,
+  title = names(object.list.secreted)[i],
+  width = 5,
+  height = 6
+)
+
+ht_secreted_out_2 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.secreted[[j]],
+  pattern = "outgoing",
+  signaling = pathway.union.secreted,
+  title = names(object.list.secreted)[j],
+  width = 5,
+  height = 6
+)
+
+ComplexHeatmap::draw(
+  ht_secreted_out_1 + ht_secreted_out_2,
+  ht_gap = grid::unit(0.5, "cm")
+)
+```
+
+```{r}
+# =========================
+# Incoming signaling
+# =========================
+
+ht_secreted_in_1 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.secreted[[i]],
+  pattern = "incoming",
+  signaling = pathway.union.secreted,
+  title = names(object.list.secreted)[i],
+  width = 5,
+  height = 6,
+  color.heatmap = "GnBu"
+)
+
+ht_secreted_in_2 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.secreted[[j]],
+  pattern = "incoming",
+  signaling = pathway.union.secreted,
+  title = names(object.list.secreted)[j],
+  width = 5,
+  height = 6,
+  color.heatmap = "GnBu"
+)
+
+ComplexHeatmap::draw(
+  ht_secreted_in_1 + ht_secreted_in_2,
+  ht_gap = grid::unit(0.5, "cm")
+)
+```
+
+```{r}
+# =========================
+# Overall signaling
+# outgoing + incoming
+# =========================
+
+ht_secreted_all_1 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.secreted[[i]],
+  pattern = "all",
+  signaling = pathway.union.secreted,
+  title = names(object.list.secreted)[i],
+  width = 5,
+  height = 6,
+  color.heatmap = "OrRd"
+)
+
+ht_secreted_all_2 <- SpatialCellChat::netAnalysis_signalingRole_heatmap(
+  object.list.secreted[[j]],
+  pattern = "all",
+  signaling = pathway.union.secreted,
+  title = names(object.list.secreted)[j],
+  width = 5,
+  height = 6,
+  color.heatmap = "OrRd"
+)
+
+ComplexHeatmap::draw(
+  ht_secreted_all_1 + ht_secreted_all_2,
+  ht_gap = grid::unit(0.5, "cm")
+)
+```
+
+# Part III: Identify the up-gulated and down-regulated signaling ligand-receptor pairs Identify dysfunctional signaling by comparing the communication probabities contact
+
+```{r}
+gg1 <- CellChat::netVisual_bubble(
+  cellchat.contact,
+  sources.use = c("eEVT", "Endothelial"),
+  targets.use = c("eEVT", "Endothelial"),
+  comparison = c(1, 2),
+  max.dataset = 2,
+  title.name = "Increased signaling in Disease",
+  angle.x = 45,
+  remove.isolate = TRUE
+)
+```
+
+```{r}
+gg2 <- CellChat::netVisual_bubble(
+  cellchat.contact,
+  sources.use = c("eEVT", "Endothelial"),
+  targets.use = c("eEVT", "Endothelial"),
+  comparison = c(1, 2),
+  max.dataset = 1,
+  title.name = "Decreased signaling in Disease",
+  angle.x = 45,
+  remove.isolate = TRUE
+)
+```
+
+```{r}
+gg1 + gg2
+```
+
+```{r}
+gg1 <- CellChat::netVisual_bubble(
+  cellchat.secreted,
+  sources.use = c("eEVT", "Endothelial"),
+  targets.use = c("eEVT", "Endothelial"),
+  comparison = c(1, 2),
+  max.dataset = 2,
+  title.name = "Increased signaling in Disease",
+  angle.x = 45,
+  remove.isolate = TRUE
+)
+```
+
+```{r}
+gg2 <- CellChat::netVisual_bubble(
+  cellchat.secreted,
+  sources.use = c("eEVT", "Endothelial"),
+  targets.use = c("eEVT", "Endothelial"),
+  comparison = c(1, 2),
+  max.dataset = 1,
+  title.name = "Decreased signaling in Disease",
+  angle.x = 45,
+  remove.isolate = TRUE
+)
+```
+
+```{r}
+gg1 + gg2
+```
+
+# Identify dysfunctional signaling by using differential expression analysis contact
+
+```{r}
+pos.dataset <- "Disease"
+features.name <- paste0(pos.dataset, ".merged")
+
+cellchat.contact <- CellChat::identifyOverExpressedGenes(
+  cellchat.contact,
+  group.dataset = "datasets",
+  pos.dataset = pos.dataset,
+  features.name = features.name,
+  only.pos = FALSE,
+  thresh.pc = 0.1,
+  thresh.fc = 0.05,
+  thresh.p = 0.05
+)
+```
+
+```{r}
+# map DEA results onto inferred communications
+net.contact <- CellChat::netMappingDEG(
+  cellchat.contact,
+  features.name = features.name
+)
+
+net.up.contact <- CellChat::subsetCommunication(
+  cellchat.contact,
+  net = net.contact,
+  datasets = "Disease",
+  ligand.logFC = 0.05,
+  receptor.logFC = NULL
+)
+
+net.down.contact <- CellChat::subsetCommunication(
+  cellchat.contact,
+  net = net.contact,
+  datasets = "Control",
+  ligand.logFC = -0.05,
+  receptor.logFC = NULL
+)
+
+gene.up.contact <- CellChat::extractGeneSubsetFromPair(
+  net.up.contact,
+  cellchat.contact
+)
+
+gene.down.contact <- CellChat::extractGeneSubsetFromPair(
+  net.down.contact,
+  cellchat.contact
+)
+```
+
+secreted
+
+```{r}
+pos.dataset <- "Disease"
+features.name <- paste0(pos.dataset, ".merged")
+
+# perform differential expression analysis
+cellchat.secreted <- CellChat::identifyOverExpressedGenes(
+  cellchat.secreted,
+  group.dataset = "datasets",
+  pos.dataset = pos.dataset,
+  features.name = features.name,
+  only.pos = FALSE,
+  thresh.pc = 0.1,
+  thresh.fc = 0.05,
+  thresh.p = 0.05
+)
+```
+
+```{r}
+# map DEG results onto inferred communications
+net.secreted <- CellChat::netMappingDEG(
+  cellchat.secreted,
+  features.name = features.name
+)
+
+# LR pairs with upregulated ligands in Disease
+net.up.secreted <- CellChat::subsetCommunication(
+  cellchat.secreted,
+  net = net.secreted,
+  datasets = "Disease",
+  ligand.logFC = 0.05,
+  receptor.logFC = NULL
+)
+
+# LR pairs relatively downregulated in Disease
+# i.e. higher in Control
+net.down.secreted <- CellChat::subsetCommunication(
+  cellchat.secreted,
+  net = net.secreted,
+  datasets = "Control",
+  ligand.logFC = -0.05,
+  receptor.logFC = NULL
+)
+
+# deconvolute signaling genes from LR pairs
+gene.up.secreted <- CellChat::extractGeneSubsetFromPair(
+  net.up.secreted,
+  cellchat.secreted
+)
+
+gene.down.secreted <- CellChat::extractGeneSubsetFromPair(
+  net.down.secreted,
+  cellchat.secreted
+)
+```
+
+Visualize the identified up-regulated and down-regulated signaling ligand-receptor pairs (A) Bubble plot contact
+
+```{r}
+pairLR.use.up.contact <- net.up.contact[, "interaction_name", drop = FALSE]
+
+gg1_contact <- CellChat::netVisual_bubble(
+  cellchat.contact,
+  pairLR.use = pairLR.use.up.contact,
+  sources.use = c("eEVT", "Endothelial"),
+  targets.use = c("eEVT", "Endothelial"),
+  comparison = c(1, 2),
+  angle.x = 90,
+  remove.isolate = TRUE,
+  title.name = "Contact: up-regulated signaling in Disease"
+)
+```
+
+```{r}
+pairLR.use.down.contact <- net.down.contact[, "interaction_name", drop = FALSE]
+
+#No significant signaling interactions are inferred based on the input
+# gg2_contact <- CellChat::netVisual_bubble(
+#   cellchat.contact,
+#   pairLR.use = pairLR.use.down.contact,
+#   sources.use = c("eEVT", "Endothelial"),
+#   targets.use = c("eEVT", "Endothelial"),
+#   comparison = c(1, 2),
+#   angle.x = 90,
+#   remove.isolate = TRUE,
+#   title.name = "Contact: down-regulated signaling in Disease"
+# )
+
+gg1_contact
+```
+
+```{r}
+pairLR.use.up <- net.up.secreted[, "interaction_name", drop = FALSE]
+
+gg1 <-  CellChat::netVisual_bubble(
+  cellchat.secreted,
+  pairLR.use = pairLR.use.up,
+  sources.use = c("eEVT", "Endothelial"),
+  targets.use = c("eEVT", "Endothelial"),
+  comparison = c(1, 2),
+  angle.x = 90,
+  remove.isolate = TRUE,
+  title.name = "Up-regulated signaling in Disease"
+)
+```
+
+```{r}
+pairLR.use.down <- net.down.secreted[, "interaction_name", drop = FALSE]
+
+gg2 <-  CellChat::netVisual_bubble(
+  cellchat.secreted,
+  pairLR.use = pairLR.use.down,
+  sources.use = c("eEVT", "Endothelial"),
+  targets.use = c("eEVT", "Endothelial"),
+  comparison = c(1, 2),
+  angle.x = 90,
+  remove.isolate = TRUE,
+  title.name = "Down-regulated signaling in Disease"
+)
+```
+
+```{r}
+gg1 + gg2
+```
+
+# Part V: Compare the signaling gene expression distribution between different datasets
+
+```{r}
+# make sure dataset order is Control -> Disease
+cellchat.contact@meta$datasets <- factor(
+  cellchat.contact@meta$datasets,
+  levels = c("Control", "Disease")
+)
+
+# Violin plot for NOTCH signaling genes
+p_notch_expr <- CellChat::plotGeneExpression(
+  cellchat.contact,
+  signaling = "NOTCH",
+  split.by = "datasets",
+  colors.ggplot = TRUE,
+  type = "violin"
+)
+```
+
+```{r}
+p_notch_expr
+```
+
+```{r}
+pathway.show <- "NOTCH"
+
+# Control
+p_notch_control <- SpatialCellChat::spatialFeaturePlot(
+  object.list.contact[[1]],
+  signaling = pathway.show,
+  do.group = FALSE,
+  do.binary = FALSE,
+  color.heatmap = "Spectral",
+  point.size = 1.3
+) +
+  ggtitle("Control: NOTCH contact signaling")
+
+# Disease
+p_notch_disease <- SpatialCellChat::spatialFeaturePlot(
+  object.list.contact[[2]],
+  signaling = pathway.show,
+  do.group = FALSE,
+  do.binary = FALSE,
+  color.heatmap = "Spectral",
+  point.size = 1.3
+) +
+  ggtitle("Disease: NOTCH contact signaling")
+
+p_notch_control
+```
+
+```{r}
+p_notch_disease
+```
+
+```{r}
+pathway.show <- "CDH5"
+
+# Control: plot CDH5 gene only
+p_cdh5_control <- SpatialCellChat::spatialFeaturePlot(
+  object.list.contact[[1]],
+  features = "CDH5",
+  do.group = FALSE,
+  do.binary = FALSE,
+  color.heatmap = "Spectral",
+  point.size = 1.3
+) +
+  ggtitle("Control: CDH5 expression")
+
+# Disease: plot CDH5 gene only
+p_cdh5_disease <- SpatialCellChat::spatialFeaturePlot(
+  object.list.contact[[2]],
+  features = "CDH5",
+  do.group = FALSE,
+  do.binary = FALSE,
+  color.heatmap = "Spectral",
+  point.size = 1.3
+) +
+  ggtitle("Disease: CDH5 signalling")
+
+p_cdh5_control
+```
+
+```{r}
+p_cdh5_disease
+```
+

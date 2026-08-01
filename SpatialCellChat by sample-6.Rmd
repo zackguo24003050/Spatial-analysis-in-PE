@@ -17,8 +17,8 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
-#Load the library
+Chunks for calculation are not run.Result starts from line 618
+# Load the library
 ```{r}
 library(SpatialCellChat)
 library(Matrix)
@@ -32,7 +32,7 @@ options(stringsAsFactors = F)
 future::plan("sequential")
 ```
 
-#Read six sample RDS, where there are two control and six diseases
+# Read six sample RDS, where there are two control and six diseases
 ```{r}
 obj_six <- readRDS(
   "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_six_donors_Myometrium.rds"
@@ -50,10 +50,12 @@ DefaultAssay(obj_six) <- "Xenium"
 #Check number of cells from each donor
 sample_col <- "donor"
 
+#FVB and FVQ are control, the rest samples are disease
 table(obj_six@meta.data[[sample_col]])
 ```
-#Function for all calculation in SpatialCellChat
-```{r}
+
+# Function for all calculation in SpatialCellChat
+```{r, eval=FALSE}
 run_contact_cellchat_one_sample <- function(dataset, signaling.type) {
   
   ###Part I: Data input & processing and initialization of Spatial CellChat object
@@ -363,8 +365,8 @@ run_contact_cellchat_one_sample <- function(dataset, signaling.type) {
 }
 ```
 
-#Function for saving RDS
-```{r}
+# Function for saving RDS
+```{r, eval=FALSE}
 save_cellchat_one_sample <- function(chat_object, sample_id, signaling.type) {
   
   output_data_dir <- "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/single_sample_cellchat"
@@ -403,8 +405,8 @@ save_cellchat_one_sample <- function(chat_object, sample_id, signaling.type) {
 }
 ```
 
-#Run for FCM sample
-```{r}
+# Run for FCM sample
+```{r, eval=FALSE}
 obj_fcm <- subset(
   obj_six,
   subset = donor == "FCM"
@@ -422,7 +424,7 @@ chat_fcm_secreted <- run_contact_cellchat_one_sample(
 ```
 
 # Save FCM contact and secreted objects
-```{r}
+```{r, eval=FALSE}
 save_cellchat_one_sample(
   chat_object = chat_fcm_contact,
   sample_id = "FCM",
@@ -437,7 +439,7 @@ save_cellchat_one_sample(
 ```
 
 # Run for FEP sample
-```{r}
+```{r, eval=FALSE}
 obj_fep <- subset(
   obj_six,
   subset = donor == "FEP"
@@ -455,7 +457,7 @@ chat_fep_secreted <- run_contact_cellchat_one_sample(
 ```
 
 # Save FEP contact and secreted objects
-```{r}
+```{r, eval=FALSE}
 save_cellchat_one_sample(
   chat_object = chat_fep_contact,
   sample_id = "FEP",
@@ -470,7 +472,7 @@ save_cellchat_one_sample(
 ```
 
 # Run for FVQ sample
-```{r}
+```{r, eval=FALSE}
 obj_fvq <- subset(
   obj_six,
   subset = donor == "FVQ"
@@ -488,7 +490,7 @@ chat_fvq_secreted <- run_contact_cellchat_one_sample(
 ```
 
 # Save FVQ contact and secreted objects
-```{r}
+```{r, eval=FALSE}
 save_cellchat_one_sample(
   chat_object = chat_fvq_contact,
   sample_id = "FVQ",
@@ -503,7 +505,7 @@ save_cellchat_one_sample(
 ```
 
 # Run for FVS sample
-```{r}
+```{r, eval=FALSE}
 obj_fvs <- subset(
   obj_six,
   subset = donor == "FVS"
@@ -521,7 +523,7 @@ chat_fvs_secreted <- run_contact_cellchat_one_sample(
 ```
 
 # Save FVS contact and secreted objects
-```{r}
+```{r, eval=FALSE}
 save_cellchat_one_sample(
   chat_object = chat_fvs_contact,
   sample_id = "FVS",
@@ -535,7 +537,7 @@ save_cellchat_one_sample(
 )
 ```
 # Run for FVB sample
-```{r}
+```{r, eval=FALSE}
 obj_fvb <- subset(
   obj_six,
   subset = donor == "FVB"
@@ -553,7 +555,7 @@ chat_fvb_secreted <- run_contact_cellchat_one_sample(
 ```
 
 # Save FVB contact and secreted objects
-```{r}
+```{r, eval=FALSE}
 save_cellchat_one_sample(
   chat_object = chat_fvb_contact,
   sample_id = "FVB",
@@ -568,7 +570,7 @@ save_cellchat_one_sample(
 ```
 
 # Run for FAM sample
-```{r}
+```{r, eval=FALSE}
 obj_fam <- subset(
   obj_six,
   subset = donor == "FAM"
@@ -586,7 +588,7 @@ chat_fam_secreted <- run_contact_cellchat_one_sample(
 ```
 
 # Save FAM contact and secreted objects
-```{r}
+```{r, eval=FALSE}
 save_cellchat_one_sample(
   chat_object = chat_fam_contact,
   sample_id = "FAM",
@@ -600,3 +602,341 @@ save_cellchat_one_sample(
 )
 ```
 
+# Loading 12 RDS
+```{r}
+single_sample_dir <- "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/single_sample_cellchat"
+
+#Two control samples
+chat_fvb_contact <- readRDS(
+  file.path(single_sample_dir, "chat_FVB_contactRange20_final.rds")
+)
+
+chat_fvb_secreted <- readRDS(
+  file.path(single_sample_dir, "chat_FVB_secreted_range250_final.rds")
+)
+
+chat_fvq_contact <- readRDS(
+  file.path(single_sample_dir, "chat_FVQ_contactRange20_final.rds")
+)
+
+chat_fvq_secreted <- readRDS(
+  file.path(single_sample_dir, "chat_FVQ_secreted_range250_final.rds")
+)
+
+#Four disease samples
+chat_fam_contact <- readRDS(
+  file.path(single_sample_dir, "chat_FAM_contactRange20_final.rds")
+)
+
+chat_fam_secreted <- readRDS(
+  file.path(single_sample_dir, "chat_FAM_secreted_range250_final.rds")
+)
+
+chat_fcm_contact <- readRDS(
+  file.path(single_sample_dir, "chat_FCM_contactRange20_final.rds")
+)
+
+chat_fcm_secreted <- readRDS(
+  file.path(single_sample_dir, "chat_FCM_secreted_range250_final.rds")
+)
+
+chat_fep_contact <- readRDS(
+  file.path(single_sample_dir, "chat_FEP_contactRange20_final.rds")
+)
+
+chat_fep_secreted <- readRDS(
+  file.path(single_sample_dir, "chat_FEP_secreted_range250_final.rds")
+)
+
+chat_fvs_contact <- readRDS(
+  file.path(single_sample_dir, "chat_FVS_contactRange20_final.rds")
+)
+
+chat_fvs_secreted <- readRDS(
+  file.path(single_sample_dir, "chat_FVS_secreted_range250_final.rds")
+)
+```
+
+# Check cell type composition in each loaded SpatialCellChat object
+```{r}
+celltype_counts <- list(
+  FVB = table(chat_fvb_contact@idents),
+  FVQ = table(chat_fvq_contact@idents),
+  FAM = table(chat_fam_contact@idents),
+  FCM = table(chat_fcm_contact@idents),
+  FEP = table(chat_fep_contact@idents),
+  FVS = table(chat_fvs_contact@idents)
+)
+
+celltype_counts
+```
+
+# Spatial plot for six single-sample SpatialCellChat objects
+```{r}
+# Fixed colors for cell types
+celltype_cols <- c(
+  "eEVT" = "#E64B35",
+  "Endothelial" = "#4DBBD5",
+  "EVT" = "#00A087"
+)
+
+p_fvb <- SpatialCellChat::spatialDimPlot(
+  chat_fvb_contact,
+  point.size = 1.5
+) +
+  ggtitle("FVB") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_fvq <- SpatialCellChat::spatialDimPlot(
+  chat_fvq_contact,
+  point.size = 1.5
+) +
+  ggtitle("FVQ") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_fam <- SpatialCellChat::spatialDimPlot(
+  chat_fam_contact,
+  point.size = 1.5
+) +
+  ggtitle("FAM") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_fcm <- SpatialCellChat::spatialDimPlot(
+  chat_fcm_contact,
+  point.size = 1.5
+) +
+  ggtitle("FCM") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_fep <- SpatialCellChat::spatialDimPlot(
+  chat_fep_contact,
+  point.size = 1.5
+) +
+  ggtitle("FEP") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_fvs <- SpatialCellChat::spatialDimPlot(
+  chat_fvs_contact,
+  point.size = 1.5
+) +
+  ggtitle("FVS") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_fvb
+p_fvq
+p_fam
+p_fcm
+p_fep
+p_fvs
+```
+dots should be smaller
+
+# Extract significant signalling
+```{r}
+extract_sig_lr_safe <- function(chat, sample_id, signaling_type, thresh = 0.01) {
+  out <- tryCatch(
+    {
+      SpatialCellChat::subsetCommunication(
+        chat,
+        slot.name = "net",
+        thresh = thresh
+      ) %>%
+        mutate(
+          sample = sample_id,
+          signaling_type = signaling_type,
+          .before = 1
+        ) %>%
+        arrange(pval, desc(prob))
+    },
+    error = function(e) {
+      message(
+        "No significant LR inferred for ",
+        sample_id,
+        " / ",
+        signaling_type,
+        " at thresh = ",
+        thresh
+      )
+      return(NULL)
+    }
+  )
+  
+  return(out)
+}
+```
+
+# All contact sample
+```{r}
+object.list.contact.single <- list(
+  FVB = chat_fvb_contact,
+  FVQ = chat_fvq_contact,
+  FAM = chat_fam_contact,
+  FCM = chat_fcm_contact,
+  FEP = chat_fep_contact,
+  FVS = chat_fvs_contact
+)
+
+sig_lr_contact_all <- bind_rows(
+  lapply(names(object.list.contact.single), function(sample_id) {
+    extract_sig_lr_safe(
+      chat = object.list.contact.single[[sample_id]],
+      sample_id = sample_id,
+      signaling_type = "contact",
+      thresh = 0.01
+    )
+  })
+)
+
+sig_lr_contact_all
+```
+
+```{r}
+object.list.secreted.single <- list(
+  FVB = chat_fvb_secreted,
+  FVQ = chat_fvq_secreted,
+  FAM = chat_fam_secreted,
+  FCM = chat_fcm_secreted,
+  FEP = chat_fep_secreted,
+  FVS = chat_fvs_secreted
+)
+
+sig_lr_secreted_all <- bind_rows(
+  lapply(names(object.list.secreted.single), function(sample_id) {
+    extract_sig_lr_safe(
+      chat = object.list.secreted.single[[sample_id]],
+      sample_id = sample_id,
+      signaling_type = "secreted",
+      thresh = 0.01
+    )
+  })
+)
+
+sig_lr_secreted_all
+```
+# Contact and secreted significant pathways in all samples
+```{r}
+object.list.contact.single <- list(
+  FVB = chat_fvb_contact,
+  FVQ = chat_fvq_contact,
+  FAM = chat_fam_contact,
+  FCM = chat_fcm_contact,
+  FEP = chat_fep_contact,
+  FVS = chat_fvs_contact
+)
+
+object.list.secreted.single <- list(
+  FVB = chat_fvb_secreted,
+  FVQ = chat_fvq_secreted,
+  FAM = chat_fam_secreted,
+  FCM = chat_fcm_secreted,
+  FEP = chat_fep_secreted,
+  FVS = chat_fvs_secreted
+)
+
+# Empty plot if no signal
+empty_rank_plot <- function(sample_id, signaling_type, reason) {
+  ggplot() +
+    annotate(
+      "text",
+      x = 0,
+      y = 0,
+      label = paste0(sample_id, "\n", signaling_type, "\n", reason),
+      size = 4
+    ) +
+    theme_void()
+}
+
+# Safe rankNet wrapper
+rankNet_safe <- function(chat, sample_id, signaling.type, title, slot.name = "netP") {
+  
+  annotation_use <- tryCatch(
+    unique(chat@LR$LRsig$annotation),
+    error = function(e) character(0)
+  )
+  
+  if (!(signaling.type %in% annotation_use)) {
+    return(
+      empty_rank_plot(
+        sample_id = sample_id,
+        signaling_type = signaling.type,
+        reason = "not in this object"
+      )
+    )
+  }
+  
+  if (slot.name == "netP") {
+    pathways_use <- tryCatch(chat@netP$pathways, error = function(e) character(0))
+    
+    if (is.null(pathways_use) || length(pathways_use) == 0) {
+      return(
+        empty_rank_plot(
+          sample_id = sample_id,
+          signaling_type = signaling.type,
+          reason = "no pathway signal"
+        )
+      )
+    }
+  }
+  
+  p <- tryCatch(
+    {
+      rankNet(
+        chat,
+        mode = "single",
+        slot.name = slot.name,
+        measure = "weight",
+        signaling.type = signaling.type,
+        title = title
+      )
+    },
+    error = function(e) {
+      empty_rank_plot(
+        sample_id = sample_id,
+        signaling_type = signaling.type,
+        reason = "rankNet failed"
+      )
+    }
+  )
+  
+  return(p)
+}
+
+# Generate rankNet plots for each sample
+rank_plots_by_sample <- lapply(names(object.list.contact.single), function(sample_id) {
+  
+  p_contact <- rankNet_safe(
+    chat = object.list.contact.single[[sample_id]],
+    sample_id = sample_id,
+    signaling.type = "Cell-Cell Contact",
+    title = paste0(sample_id, " Cell-Cell Contact"),
+    slot.name = "netP"
+  )
+  
+  p_secreted <- rankNet_safe(
+    chat = object.list.secreted.single[[sample_id]],
+    sample_id = sample_id,
+    signaling.type = "Secreted Signaling",
+    title = paste0(sample_id, " Secreted Signaling"),
+    slot.name = "netP"
+  )
+  
+  p_contact + p_secreted
+})
+
+names(rank_plots_by_sample) <- names(object.list.contact.single)
+
+# Show each sample separately
+rank_plots_by_sample$FVB
+rank_plots_by_sample$FVQ
+rank_plots_by_sample$FAM
+rank_plots_by_sample$FCM
+rank_plots_by_sample$FEP
+rank_plots_by_sample$FVS
+```
+加一下cell type
