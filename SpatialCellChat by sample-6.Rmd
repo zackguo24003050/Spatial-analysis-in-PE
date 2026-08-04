@@ -682,7 +682,7 @@ celltype_cols <- c(
 
 p_fvb <- SpatialCellChat::spatialDimPlot(
   chat_fvb_contact,
-  point.size = 1.5
+  point.size = 1.2
 ) +
   ggtitle("FVB") +
   scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
@@ -690,7 +690,7 @@ p_fvb <- SpatialCellChat::spatialDimPlot(
 
 p_fvq <- SpatialCellChat::spatialDimPlot(
   chat_fvq_contact,
-  point.size = 1.5
+  point.size = 1.2
 ) +
   ggtitle("FVQ") +
   scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
@@ -698,7 +698,7 @@ p_fvq <- SpatialCellChat::spatialDimPlot(
 
 p_fam <- SpatialCellChat::spatialDimPlot(
   chat_fam_contact,
-  point.size = 1.5
+  point.size = 1.2
 ) +
   ggtitle("FAM") +
   scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
@@ -706,7 +706,7 @@ p_fam <- SpatialCellChat::spatialDimPlot(
 
 p_fcm <- SpatialCellChat::spatialDimPlot(
   chat_fcm_contact,
-  point.size = 1.5
+  point.size = 1.2
 ) +
   ggtitle("FCM") +
   scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
@@ -714,7 +714,7 @@ p_fcm <- SpatialCellChat::spatialDimPlot(
 
 p_fep <- SpatialCellChat::spatialDimPlot(
   chat_fep_contact,
-  point.size = 1.5
+  point.size = 1.2
 ) +
   ggtitle("FEP") +
   scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
@@ -722,7 +722,7 @@ p_fep <- SpatialCellChat::spatialDimPlot(
 
 p_fvs <- SpatialCellChat::spatialDimPlot(
   chat_fvs_contact,
-  point.size = 1.5
+  point.size = 1.2
 ) +
   ggtitle("FVS") +
   scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
@@ -819,6 +819,7 @@ sig_lr_secreted_all <- bind_rows(
 
 sig_lr_secreted_all
 ```
+
 # Contact and secreted significant pathways in all samples
 ```{r}
 object.list.contact.single <- list(
@@ -853,7 +854,13 @@ empty_rank_plot <- function(sample_id, signaling_type, reason) {
 }
 
 # Safe rankNet wrapper
-rankNet_safe <- function(chat, sample_id, signaling.type, title, slot.name = "netP") {
+rankNet_safe <- function(
+  chat,
+  sample_id,
+  signaling.type,
+  title,
+  slot.name = "netP"
+) {
   
   annotation_use <- tryCatch(
     unique(chat@LR$LRsig$annotation),
@@ -939,4 +946,139 @@ rank_plots_by_sample$FCM
 rank_plots_by_sample$FEP
 rank_plots_by_sample$FVS
 ```
-加一下cell type
+
+
+# Visualize the enriched cell groups
+FVB
+```{r}
+idx.Paracrine <- which(chat_fvb_secreted@LR$LRsig$annotation == "Secreted Signaling")
+chat_fvb_secreted <- spatialGiPlot(chat_fvb_secreted, plot.title = "Secreted Signaling", slot.name = "net", signaling.name = idx.Paracrine, measure = c("indeg"), measure.name = c("incoming"), show.plot = FALSE)
+chat_fvb_secreted@meta <- chat_fvb_secreted@meta %>%
+  mutate(SecretedHotspot = Getis.Ord.Gi.Secreted.Signaling * (Getis.Ord.Gi.P.Secreted.Signaling < 0.05)) %>%
+  mutate(SecretedHotspot = ifelse(SecretedHotspot > 0, "Hot", ifelse(SecretedHotspot < 0, "Cold", "Other")))
+spatialLeePlot(chat_fvb_secreted, group.by2 = "SecretedHotspot", cutoff.Lee = 0.05, y.levels = c("Hot", "Cold", "Other"))
+```
+FVQ
+```{r}
+idx.Paracrine <- which(chat_fvq_secreted@LR$LRsig$annotation == "Secreted Signaling")
+chat_fvq_secreted <- spatialGiPlot(chat_fvq_secreted, plot.title = "Secreted Signaling", slot.name = "net", signaling.name = idx.Paracrine, measure = c("indeg"), measure.name = c("incoming"), show.plot = FALSE)
+chat_fvq_secreted@meta <- chat_fvq_secreted@meta %>%
+  mutate(SecretedHotspot = Getis.Ord.Gi.Secreted.Signaling * (Getis.Ord.Gi.P.Secreted.Signaling < 0.05)) %>%
+  mutate(SecretedHotspot = ifelse(SecretedHotspot > 0, "Hot", ifelse(SecretedHotspot < 0, "Cold", "Other")))
+spatialLeePlot(chat_fvq_secreted, group.by2 = "SecretedHotspot", cutoff.Lee = 0.05, y.levels = c("Hot", "Cold", "Other"))
+```
+FAM
+```{r}
+idx.Paracrine <- which(chat_fam_secreted@LR$LRsig$annotation == "Secreted Signaling")
+chat_fam_secreted <- spatialGiPlot(chat_fam_secreted, plot.title = "Secreted Signaling", slot.name = "net", signaling.name = idx.Paracrine, measure = c("indeg"), measure.name = c("incoming"), show.plot = FALSE)
+chat_fam_secreted@meta <- chat_fam_secreted@meta %>%
+  mutate(SecretedHotspot = Getis.Ord.Gi.Secreted.Signaling * (Getis.Ord.Gi.P.Secreted.Signaling < 0.05)) %>%
+  mutate(SecretedHotspot = ifelse(SecretedHotspot > 0, "Hot", ifelse(SecretedHotspot < 0, "Cold", "Other")))
+spatialLeePlot(chat_fam_secreted, group.by2 = "SecretedHotspot", cutoff.Lee = 0.05, y.levels = c("Hot", "Cold", "Other"))
+```
+FCM
+```{r}
+idx.Paracrine <- which(chat_fcm_secreted@LR$LRsig$annotation == "Secreted Signaling")
+chat_fcm_secreted <- spatialGiPlot(chat_fcm_secreted, plot.title = "Secreted Signaling", slot.name = "net", signaling.name = idx.Paracrine, measure = c("indeg"), measure.name = c("incoming"), show.plot = FALSE)
+chat_fcm_secreted@meta <- chat_fcm_secreted@meta %>%
+  mutate(SecretedHotspot = Getis.Ord.Gi.Secreted.Signaling * (Getis.Ord.Gi.P.Secreted.Signaling < 0.05)) %>%
+  mutate(SecretedHotspot = ifelse(SecretedHotspot > 0, "Hot", ifelse(SecretedHotspot < 0, "Cold", "Other")))
+spatialLeePlot(chat_fcm_secreted, group.by2 = "SecretedHotspot", cutoff.Lee = 0.05, y.levels = c("Hot", "Cold", "Other"))
+```
+and heatmap
+
+```{r}
+sample.order <- c("FVB", "FVQ", "FAM", "FCM", "FEP", "FVS")
+
+object.list.secreted.single <- object.list.secreted.single[sample.order]
+
+plot_secreted_hotspot <- function(chat) {
+  idx.Paracrine <- which(chat@LR$LRsig$annotation == "Secreted Signaling")
+  
+  chat <- spatialGiPlot(
+    chat,
+    plot.title = "Secreted Signaling",
+    slot.name = "net",
+    signaling.name = idx.Paracrine,
+    measure = c("indeg"),
+    measure.name = c("incoming"),
+    show.plot = FALSE
+  )
+  
+  chat@meta <- chat@meta %>%
+    mutate(SecretedHotspot = Getis.Ord.Gi.Secreted.Signaling * (Getis.Ord.Gi.P.Secreted.Signaling < 0.05)) %>%
+    mutate(SecretedHotspot = ifelse(SecretedHotspot > 0, "Hot", ifelse(SecretedHotspot < 0, "Cold", "Other")))
+  
+  spatialLeePlot(
+    chat,
+    group.by2 = "SecretedHotspot",
+    cutoff.Lee = 0.05,
+    y.levels = c("Hot", "Cold", "Other")
+  )
+}
+
+secreted_hotspot_plots <- lapply(
+  object.list.secreted.single,
+  plot_secreted_hotspot
+)
+
+secreted_hotspot_plots$FVB
+secreted_hotspot_plots$FVQ
+secreted_hotspot_plots$FAM
+secreted_hotspot_plots$FCM
+secreted_hotspot_plots$FEP
+secreted_hotspot_plots$FVS
+```
+
+# Heatmap of cell-type communication
+
+```{r}
+object.list.contact.single <- object.list.contact.single[sample.order]
+object.list.secreted.single <- object.list.secreted.single[sample.order]
+
+plot_celltype_heatmap <- function(chat, title.name) {
+  gg1 <- netVisual_heatmap(chat) +
+    ggtitle(paste0(title.name, ": interaction number"))
+  
+  gg2 <- netVisual_heatmap(chat, measure = "weight") +
+    ggtitle(paste0(title.name, ": interaction strength"))
+  
+  gg1 + gg2
+}
+```
+
+```{r}
+contact_heatmap_plots <- lapply(names(object.list.contact.single), function(sample_id) {
+  plot_celltype_heatmap(
+    object.list.contact.single[[sample_id]],
+    paste(sample_id, "contact")
+  )
+})
+
+names(contact_heatmap_plots) <- names(object.list.contact.single)
+
+contact_heatmap_plots$FVB
+contact_heatmap_plots$FVQ
+contact_heatmap_plots$FAM
+contact_heatmap_plots$FCM
+contact_heatmap_plots$FEP
+contact_heatmap_plots$FVS
+```
+
+```{r}
+secreted_heatmap_plots <- lapply(names(object.list.secreted.single), function(sample_id) {
+  plot_celltype_heatmap(
+    object.list.secreted.single[[sample_id]],
+    paste(sample_id, "secreted")
+  )
+})
+
+names(secreted_heatmap_plots) <- names(object.list.secreted.single)
+
+secreted_heatmap_plots$FVB
+secreted_heatmap_plots$FVQ
+secreted_heatmap_plots$FAM
+secreted_heatmap_plots$FCM
+secreted_heatmap_plots$FEP
+secreted_heatmap_plots$FVS
+```
