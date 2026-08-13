@@ -66,7 +66,7 @@ cellchat.secreted <- mergeSpatialCellChat(
 ```
 
 # Compare the total number of interactions and interaction strength contact
-
+correct average
 ```{r}
 gg1_contact <- compareInteractions(
   cellchat.contact,
@@ -198,7 +198,7 @@ gg_endo_contact <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
 ```{r}
 gg_eevt_contact
 ```
-
+CD80 immune cells? under stress?
 ```{r}
 gg_endo_contact
 ```
@@ -220,7 +220,7 @@ gg2_endo_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
 ```{r}
 gg2_eevt_secreted
 ```
-
+negative value?
 ```{r}
 gg2_endo_secreted
 ```
@@ -634,7 +634,7 @@ gg2 <- CellChat::netVisual_bubble(
 
 gg1 + gg2
 ```
-
+meaning of color
 ```{r}
 gg1 <- CellChat::netVisual_bubble(
   cellchat.secreted,
@@ -853,5 +853,259 @@ p_notch_expr <- CellChat::plotGeneExpression(
 
 ```{r}
 p_notch_expr
+```
+
+# Circle plot of interaction number and strength across datasets
+
+Contact
+
+```{r}
+weight.max.contact <- CellChat::getMaxWeight(
+  object.list.contact,
+  attribute = c("count", "weight")
+)
+
+par(mfrow = c(1, 2), xpd = TRUE)
+
+for (i in seq_along(object.list.contact)) {
+  CellChat::netVisual_circle(
+    object.list.contact[[i]]@net$count,
+    weight.scale = TRUE,
+    label.edge = FALSE,
+    edge.weight.max = weight.max.contact[1],
+    edge.width.max = 12,
+    title.name = paste0("Contact number - ", names(object.list.contact)[i])
+  )
+}
+```
+
+```{r}
+par(mfrow = c(1, 2), xpd = TRUE)
+
+for (i in seq_along(object.list.contact)) {
+  CellChat::netVisual_circle(
+    object.list.contact[[i]]@net$weight,
+    weight.scale = TRUE,
+    label.edge = FALSE,
+    edge.weight.max = weight.max.contact[2],
+    edge.width.max = 12,
+    title.name = paste0("Contact strength - ", names(object.list.contact)[i])
+  )
+}
+```
+
+Secreted
+
+```{r}
+weight.max.secreted <- CellChat::getMaxWeight(
+  object.list.secreted,
+  attribute = c("count", "weight")
+)
+
+par(mfrow = c(1, 2), xpd = TRUE)
+
+for (i in seq_along(object.list.secreted)) {
+  CellChat::netVisual_circle(
+    object.list.secreted[[i]]@net$count,
+    weight.scale = TRUE,
+    label.edge = FALSE,
+    edge.weight.max = weight.max.secreted[1],
+    edge.width.max = 12,
+    title.name = paste0("Secreted number - ", names(object.list.secreted)[i])
+  )
+}
+```
+
+```{r}
+par(mfrow = c(1, 2), xpd = TRUE)
+
+for (i in seq_along(object.list.secreted)) {
+  CellChat::netVisual_circle(
+    object.list.secreted[[i]]@net$weight,
+    weight.scale = TRUE,
+    label.edge = FALSE,
+    edge.weight.max = weight.max.secreted[2],
+    edge.width.max = 12,
+    title.name = paste0("Secreted strength - ", names(object.list.secreted)[i])
+  )
+}
+```
+
+# Circle plot of coarse cell-type communication
+
+Contact
+
+```{r}
+group.cellType.contact <- c(
+  eEVT = "EVT",
+  Endothelial = "Endothelial",
+  EVT = "EVT"
+)
+
+object.list.contact.coarse <- lapply(object.list.contact, function(x) {
+  group.use <- factor(
+    group.cellType.contact[levels(x@idents)],
+    levels = c("EVT", "Endothelial")
+  )
+  
+  CellChat::mergeInteractions(
+    x,
+    group.use
+  )
+})
+
+cellchat.contact.coarse <- mergeSpatialCellChat(
+  object.list.contact.coarse,
+  add.names = names(object.list.contact.coarse),
+  cell.prefix = TRUE
+)
+```
+
+```{r}
+weight.max.contact.coarse <- CellChat::getMaxWeight(
+  object.list.contact.coarse,
+  slot.name = c("net", "net"),
+  attribute = c("count", "count.merged")
+)
+
+par(mfrow = c(1, 2), xpd = TRUE)
+
+for (i in seq_along(object.list.contact.coarse)) {
+  CellChat::netVisual_circle(
+    object.list.contact.coarse[[i]]@net$count.merged,
+    weight.scale = TRUE,
+    label.edge = TRUE,
+    edge.weight.max = weight.max.contact.coarse[2],
+    edge.width.max = 12,
+    title.name = paste0("Contact coarse number - ", names(object.list.contact.coarse)[i])
+  )
+}
+```
+
+```{r}
+weight.max.contact.coarse.weight <- CellChat::getMaxWeight(
+  object.list.contact.coarse,
+  slot.name = c("net", "net"),
+  attribute = c("weight", "weight.merged")
+)
+
+par(mfrow = c(1, 2), xpd = TRUE)
+
+for (i in seq_along(object.list.contact.coarse)) {
+  CellChat::netVisual_circle(
+    object.list.contact.coarse[[i]]@net$weight.merged,
+    weight.scale = TRUE,
+    label.edge = TRUE,
+    edge.weight.max = weight.max.contact.coarse.weight[2],
+    edge.width.max = 12,
+    title.name = paste0("Contact coarse strength - ", names(object.list.contact.coarse)[i])
+  )
+}
+```
+
+```{r}
+par(mfrow = c(1, 2), xpd = TRUE)
+
+CellChat::netVisual_diffInteraction(
+  cellchat.contact.coarse,
+  weight.scale = TRUE,
+  measure = "count.merged",
+  label.edge = TRUE
+)
+
+CellChat::netVisual_diffInteraction(
+  cellchat.contact.coarse,
+  weight.scale = TRUE,
+  measure = "weight.merged",
+  label.edge = TRUE
+)
+```
+
+Secreted
+
+```{r}
+group.cellType.secreted <- c(
+  eEVT = "EVT",
+  Endothelial = "Endothelial",
+  EVT = "EVT"
+)
+
+object.list.secreted.coarse <- lapply(object.list.secreted, function(x) {
+  group.use <- factor(
+    group.cellType.secreted[levels(x@idents)],
+    levels = c("EVT", "Endothelial")
+  )
+  
+  CellChat::mergeInteractions(
+    x,
+    group.use
+  )
+})
+
+cellchat.secreted.coarse <- mergeSpatialCellChat(
+  object.list.secreted.coarse,
+  add.names = names(object.list.secreted.coarse),
+  cell.prefix = TRUE
+)
+```
+
+```{r}
+weight.max.secreted.coarse <- CellChat::getMaxWeight(
+  object.list.secreted.coarse,
+  slot.name = c("net", "net"),
+  attribute = c("count", "count.merged")
+)
+
+par(mfrow = c(1, 2), xpd = TRUE)
+
+for (i in seq_along(object.list.secreted.coarse)) {
+  CellChat::netVisual_circle(
+    object.list.secreted.coarse[[i]]@net$count.merged,
+    weight.scale = TRUE,
+    label.edge = TRUE,
+    edge.weight.max = weight.max.secreted.coarse[2],
+    edge.width.max = 12,
+    title.name = paste0("Secreted coarse number - ", names(object.list.secreted.coarse)[i])
+  )
+}
+```
+
+```{r}
+weight.max.secreted.coarse.weight <- CellChat::getMaxWeight(
+  object.list.secreted.coarse,
+  slot.name = c("net", "net"),
+  attribute = c("weight", "weight.merged")
+)
+
+par(mfrow = c(1, 2), xpd = TRUE)
+
+for (i in seq_along(object.list.secreted.coarse)) {
+  CellChat::netVisual_circle(
+    object.list.secreted.coarse[[i]]@net$weight.merged,
+    weight.scale = TRUE,
+    label.edge = TRUE,
+    edge.weight.max = weight.max.secreted.coarse.weight[2],
+    edge.width.max = 12,
+    title.name = paste0("Secreted coarse strength - ", names(object.list.secreted.coarse)[i])
+  )
+}
+```
+
+```{r}
+par(mfrow = c(1, 2), xpd = TRUE)
+
+CellChat::netVisual_diffInteraction(
+  cellchat.secreted.coarse,
+  weight.scale = TRUE,
+  measure = "count.merged",
+  label.edge = TRUE
+)
+
+CellChat::netVisual_diffInteraction(
+  cellchat.secreted.coarse,
+  weight.scale = TRUE,
+  measure = "weight.merged",
+  label.edge = TRUE
+)
 ```
 
