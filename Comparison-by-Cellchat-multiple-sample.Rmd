@@ -67,6 +67,9 @@ cellchat.secreted <- mergeSpatialCellChat(
 
 # Compare the total number of interactions and interaction strength contact
 correct average
+
+> Note: **要改**. This is pooled Control vs pooled Disease; Control has 2 donors and Disease has 4 donors, so it is not donor-normalized.
+
 ```{r}
 gg1_contact <- compareInteractions(
   cellchat.contact,
@@ -85,6 +88,8 @@ gg1_contact
 gg2_contact
 ```
 
+> Note: **要改**. This is pooled Control vs pooled Disease; Control has 2 donors and Disease has 4 donors, so it is not donor-normalized.
+
 ```{r}
 gg1_secreted <- compareInteractions(
   cellchat.secreted,
@@ -102,6 +107,8 @@ gg2_secreted <- compareInteractions(
 gg1_secreted + gg2_secreted
 ```
 
+> Note: **要改**. This heatmap uses pooled condition-level interaction matrices, not per-donor averaged matrices.
+
 ```{r}
 gg1_contact <- netVisual_heatmap(cellchat.contact)
 gg2_contact <- netVisual_heatmap(cellchat.contact, measure = "weight")
@@ -109,6 +116,8 @@ gg1_contact+gg2_contact
 ```
 
 secreted
+
+> Note: **要改**. This heatmap uses pooled condition-level interaction matrices, not per-donor averaged matrices.
 
 ```{r}
 gg1_secreted <- netVisual_heatmap(cellchat.secreted)
@@ -118,6 +127,8 @@ gg1_secreted+gg2_secreted
 
 
 # Compare the major sources and targets in a 2D space (A) Identify cell populations with significant changes in sending or receiving signals Contact
+
+> Note: **中等受影响**. Sender/receiver role is computed from pooled condition objects; interpret as pooled Control vs pooled Disease, not donor-average role.
 
 ```{r}
 num.link.contact <- sapply(
@@ -148,6 +159,8 @@ for (i in seq_along(object.list.contact)) {
 
 patchwork::wrap_plots(plots = gg.contact.role)
 ```
+
+> Note: **中等受影响**. Sender/receiver role is computed from pooled condition objects; interpret as pooled Control vs pooled Disease, not donor-average role.
 
 ```{r}
 num.link.secreted <- sapply(
@@ -181,12 +194,16 @@ patchwork::wrap_plots(plots = gg.secreted.role)
 
 # 1. Identify the signaling changes of specific cell populations contact
 
+> Note: **中等受影响**. Signaling change scatter uses pooled centrality differences; it is not donor-normalized.
+
 ```{r}
 gg_eevt_contact <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
   cellchat.contact,
   idents.use = "eEVT"
 )
 ```
+
+> Note: **中等受影响**. Signaling change scatter uses pooled centrality differences; it is not donor-normalized.
 
 ```{r}
 gg_endo_contact <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
@@ -195,13 +212,20 @@ gg_endo_contact <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
 )
 ```
 
+> Note: **中等受影响**. This displays a pooled centrality-difference scatter; use only as pooled-condition evidence.
+
 ```{r}
 gg_eevt_contact
 ```
 CD80 immune cells? under stress?
+
+> Note: **中等受影响**. This displays a pooled centrality-difference scatter; use only as pooled-condition evidence.
+
 ```{r}
 gg_endo_contact
 ```
+
+> Note: **中等受影响**. Signaling change scatter uses pooled centrality differences; it is not donor-normalized.
 
 ```{r}
 gg2_eevt_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
@@ -210,6 +234,8 @@ gg2_eevt_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
 )
 ```
 
+> Note: **中等受影响**. Signaling change scatter uses pooled centrality differences; it is not donor-normalized.
+
 ```{r}
 gg2_endo_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
   cellchat.secreted,
@@ -217,13 +243,20 @@ gg2_endo_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
 )
 ```
 
+> Note: **中等受影响**. This displays a pooled centrality-difference scatter; use only as pooled-condition evidence.
+
 ```{r}
 gg2_eevt_secreted
 ```
 negative value?
+
+> Note: **中等受影响**. This displays a pooled centrality-difference scatter; use only as pooled-condition evidence.
+
 ```{r}
 gg2_endo_secreted
 ```
+
+> Note: **不受影响**. Functional pathway clustering compares pathway communication patterns, not total interaction counts; describe it as pooled-condition pattern clustering.
 
 ```{r}
 cellchat.contact <- SpatialCellChat::computeNetSimilarityPairwise(
@@ -250,6 +283,8 @@ SpatialCellChat::netVisual_embeddingPairwise(
 
 secreted
 
+> Note: **不受影响**. Functional pathway clustering compares pathway communication patterns, not total interaction counts; describe it as pooled-condition pattern clustering.
+
 ```{r}
 cellchat.secreted <- SpatialCellChat::computeNetSimilarityPairwise(
   cellchat.secreted,
@@ -274,6 +309,8 @@ SpatialCellChat::netVisual_embeddingPairwise(
 ```
 
 # Identify signaling groups based on structure similarity contact
+
+> Note: **不受影响**. Structural pathway clustering compares pathway network structure, not total interaction counts; describe it as pooled-condition pattern clustering.
 
 ```{r}
 cellchat.contact <- SpatialCellChat::computeNetSimilarityPairwise(
@@ -305,6 +342,8 @@ SpatialCellChat::netVisual_embeddingPairwiseZoomIn(
 ```
 
 secreted
+
+> Note: **不受影响**. Structural pathway clustering compares pathway network structure, not total interaction counts; describe it as pooled-condition pattern clustering.
 
 ```{r}
 cellchat.secreted <- SpatialCellChat::computeNetSimilarityPairwise(
@@ -337,6 +376,8 @@ SpatialCellChat::netVisual_embeddingPairwiseZoomIn(
 
 Compute and visualize the pathway distance in the learned joint manifold contact
 
+> Note: **不受影响**. Pathway similarity ranking is about pathway pattern distance, not direct interaction-count totals.
+
 ```{r}
 CellChat::rankSimilarity(
   cellchat.contact,
@@ -346,6 +387,8 @@ CellChat::rankSimilarity(
 
 secreted
 
+> Note: **不受影响**. Pathway similarity ranking is about pathway pattern distance, not direct interaction-count totals.
+
 ```{r}
 CellChat::rankSimilarity(
   cellchat.secreted,
@@ -354,6 +397,8 @@ CellChat::rankSimilarity(
 ```
 
 # Identify altered signaling with distinct interaction strength (A) Compare the overall information flow of each signaling pathway or ligand-receptor pair contact
+
+> Note: **中等受影响**. rankNet compares pooled information flow; use donor-level pathway summaries for donor-normalized conclusions.
 
 ```{r}
 gg1_contact_ranknet <- SpatialCellChat::rankNet(
@@ -378,6 +423,8 @@ gg2_contact_ranknet <- SpatialCellChat::rankNet(
 
 gg1_contact_ranknet + gg2_contact_ranknet
 ```
+
+> Note: **中等受影响**. rankNet compares pooled information flow; use donor-level pathway summaries for donor-normalized conclusions.
 
 ```{r}
 gg1_secreted_ranknet <- SpatialCellChat::rankNet(
@@ -609,6 +656,8 @@ ComplexHeatmap::draw(
 
 # Part III: Identify the up-gulated and down-regulated signaling ligand-receptor pairs Identify dysfunctional signaling by comparing the communication probabities contact
 
+> Note: **中等受影响**. Bubble plot is based on pooled LR probability differences; useful for candidate LR pairs, not donor-normalized conclusions.
+
 ```{r}
 gg1 <- CellChat::netVisual_bubble(
   cellchat.contact,
@@ -635,6 +684,9 @@ gg2 <- CellChat::netVisual_bubble(
 gg1 + gg2
 ```
 meaning of color
+
+> Note: **中等受影响**. Bubble plot is based on pooled LR probability differences; useful for candidate LR pairs, not donor-normalized conclusions.
+
 ```{r}
 gg1 <- CellChat::netVisual_bubble(
   cellchat.secreted,
@@ -772,6 +824,8 @@ gene.down.secreted <- CellChat::extractGeneSubsetFromPair(
 
 Visualize the identified up-regulated and down-regulated signaling ligand-receptor pairs (A) Bubble plot contact
 
+> Note: **中等受影响**. Up/down LR pairs are selected from pooled differences; use as candidates unless validated per donor.
+
 ```{r}
 pairLR.use.up.contact <- net.up.contact[, "interaction_name", drop = FALSE]
 
@@ -801,6 +855,8 @@ gg2_contact <- CellChat::netVisual_bubble(
 
 gg1_contact + gg2_contact
 ```
+
+> Note: **中等受影响**. Up/down LR pairs are selected from pooled differences; use as candidates unless validated per donor.
 
 ```{r}
 pairLR.use.up <- net.up.secreted[, "interaction_name", drop = FALSE]
@@ -834,6 +890,8 @@ gg1 + gg2
 
 # Part V: Compare the signaling gene expression distribution between different datasets
 
+> Note: **不受影响**. This is gene expression, not inferred interaction count; interpret as pooled expression distribution.
+
 ```{r}
 # make sure dataset order is Control -> Disease
 cellchat.contact@meta$datasets <- factor(
@@ -851,6 +909,8 @@ p_notch_expr <- CellChat::plotGeneExpression(
 )
 ```
 
+> Note: **不受影响**. This displays the expression plot generated above, not inferred interaction count.
+
 ```{r}
 p_notch_expr
 ```
@@ -858,6 +918,8 @@ p_notch_expr
 # Circle plot of interaction number and strength across datasets
 
 Contact
+
+> Note: **要改**. Circle plot uses pooled count matrices; not donor-normalized.
 
 ```{r}
 weight.max.contact <- CellChat::getMaxWeight(
@@ -879,6 +941,8 @@ for (i in seq_along(object.list.contact)) {
 }
 ```
 
+> Note: **要改**. Circle plot uses pooled weight matrices; not donor-normalized.
+
 ```{r}
 par(mfrow = c(1, 2), xpd = TRUE)
 
@@ -895,6 +959,8 @@ for (i in seq_along(object.list.contact)) {
 ```
 
 Secreted
+
+> Note: **要改**. Circle plot uses pooled count matrices; not donor-normalized.
 
 ```{r}
 weight.max.secreted <- CellChat::getMaxWeight(
@@ -915,6 +981,8 @@ for (i in seq_along(object.list.secreted)) {
   )
 }
 ```
+
+> Note: **要改**. Circle plot uses pooled weight matrices; not donor-normalized.
 
 ```{r}
 par(mfrow = c(1, 2), xpd = TRUE)
@@ -961,6 +1029,8 @@ cellchat.contact.coarse <- mergeSpatialCellChat(
 )
 ```
 
+> Note: **要改**. Coarse circle plot uses pooled merged count matrices; not donor-normalized.
+
 ```{r}
 weight.max.contact.coarse <- CellChat::getMaxWeight(
   object.list.contact.coarse,
@@ -982,6 +1052,8 @@ for (i in seq_along(object.list.contact.coarse)) {
 }
 ```
 
+> Note: **要改**. Coarse circle plot uses pooled merged weight matrices; not donor-normalized.
+
 ```{r}
 weight.max.contact.coarse.weight <- CellChat::getMaxWeight(
   object.list.contact.coarse,
@@ -1002,6 +1074,8 @@ for (i in seq_along(object.list.contact.coarse)) {
   )
 }
 ```
+
+> Note: **要改**. Differential coarse network is pooled Control vs pooled Disease, not donor-normalized.
 
 ```{r}
 par(mfrow = c(1, 2), xpd = TRUE)
@@ -1049,6 +1123,8 @@ cellchat.secreted.coarse <- mergeSpatialCellChat(
 )
 ```
 
+> Note: **要改**. Coarse circle plot uses pooled merged count matrices; not donor-normalized.
+
 ```{r}
 weight.max.secreted.coarse <- CellChat::getMaxWeight(
   object.list.secreted.coarse,
@@ -1070,6 +1146,8 @@ for (i in seq_along(object.list.secreted.coarse)) {
 }
 ```
 
+> Note: **要改**. Coarse circle plot uses pooled merged weight matrices; not donor-normalized.
+
 ```{r}
 weight.max.secreted.coarse.weight <- CellChat::getMaxWeight(
   object.list.secreted.coarse,
@@ -1090,6 +1168,8 @@ for (i in seq_along(object.list.secreted.coarse)) {
   )
 }
 ```
+
+> Note: **要改**. Differential coarse network is pooled Control vs pooled Disease, not donor-normalized.
 
 ```{r}
 par(mfrow = c(1, 2), xpd = TRUE)
