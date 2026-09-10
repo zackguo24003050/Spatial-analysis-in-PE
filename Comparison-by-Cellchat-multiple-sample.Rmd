@@ -13,6 +13,7 @@ library(ggplot2)
 library(future)
 library(ComplexHeatmap)
 library(grid)
+library(Seurat)
 
 future::plan("sequential")
 options(future.globals.maxSize = 4 * 1024^3)  # 4 GB
@@ -65,39 +66,272 @@ cellchat.secreted <- mergeSpatialCellChat(
 )
 ```
 
-# Compare the total number of interactions and interaction strength contact
-correct average
-
-> Note: **要改**. This is pooled Control vs pooled Disease; Control has 2 donors and Disease has 4 donors, so it is not donor-normalized.
+# Load single-sample RDS for donor-averaged interaction number
 
 ```{r}
-gg1_contact <- compareInteractions(
+single_sample_dir <- "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/single_sample_cellchat"
+
+sample.order <- c("FVB", "FVQ", "FAM", "FCM", "FEP", "FVS")
+sample.condition <- c(
+  FVB = "Control",
+  FVQ = "Control",
+  FAM = "Disease",
+  FCM = "Disease",
+  FEP = "Disease",
+  FVS = "Disease"
+)
+
+object.list.contact.single <- list(
+  FVB = readRDS(file.path(single_sample_dir, "chat_FVB_contactRange20_final.rds")),
+  FVQ = readRDS(file.path(single_sample_dir, "chat_FVQ_contactRange20_final.rds")),
+  FAM = readRDS(file.path(single_sample_dir, "chat_FAM_contactRange20_final.rds")),
+  FCM = readRDS(file.path(single_sample_dir, "chat_FCM_contactRange20_final.rds")),
+  FEP = readRDS(file.path(single_sample_dir, "chat_FEP_contactRange20_final.rds")),
+  FVS = readRDS(file.path(single_sample_dir, "chat_FVS_contactRange20_final.rds"))
+)
+
+object.list.secreted.single <- list(
+  FVB = readRDS(file.path(single_sample_dir, "chat_FVB_secreted_range250_final.rds")),
+  FVQ = readRDS(file.path(single_sample_dir, "chat_FVQ_secreted_range250_final.rds")),
+  FAM = readRDS(file.path(single_sample_dir, "chat_FAM_secreted_range250_final.rds")),
+  FCM = readRDS(file.path(single_sample_dir, "chat_FCM_secreted_range250_final.rds")),
+  FEP = readRDS(file.path(single_sample_dir, "chat_FEP_secreted_range250_final.rds")),
+  FVS = readRDS(file.path(single_sample_dir, "chat_FVS_secreted_range250_final.rds"))
+)
+
+object.list.contact.single <- object.list.contact.single[sample.order]
+object.list.secreted.single <- object.list.secreted.single[sample.order]
+
+get_count_matrix <- function(chat) {
+  cell.types <- c("eEVT", "Endothelial", "EVT")
+  mat <- as.matrix(chat@net$count)
+  mat.full <- matrix(
+    0,
+    nrow = length(cell.types),
+    ncol = length(cell.types),
+    dimnames = list(cell.types, cell.types)
+  )
+  
+  source.use <- intersect(cell.types, rownames(mat))
+  target.use <- intersect(cell.types, colnames(mat))
+  mat.full[source.use, target.use] <- mat[source.use, target.use, drop = FALSE]
+  mat.full
+}
+
+average_count_matrix <- function(object.list) {
+  out <- lapply(c("Control", "Disease"), function(condition.use) {
+    sample.use <- names(object.list)[sample.condition[names(object.list)] == condition.use]
+    mats <- lapply(object.list[sample.use], get_count_matrix)
+    Reduce("+", mats) / length(mats)
+  })
+  names(out) <- c("Control", "Disease")
+  out
+}
+
+plot_donor_average_summary <- function(object.list, title.name, measure = c("number", "strength")) {
+  measure <- match.arg(measure)
+  
+  df <- data.frame(
+    sample = names(object.list),
+    condition = sample.condition[names(object.list)],
+    value = sapply(object.list, function(x) {
+      if (measure == "number") {
+        sum(get_count_matrix(x))
+      } else {
+        sum(as.matrix(x@net$weight))
+      }
+    })
+  )
+  
+  mean.df <- aggregate(
+    value ~ condition,
+    data = df,
+    FUN = mean
+  )
+  
+  y.title <- ifelse(
+    measure == "number",
+    "Mean interaction number per donor",
+    "Mean interaction strength per donor"
+  )
+  
+  ggplot(mean.df, aes(x = condition, y = value, fill = condition)) +
+    geom_col(width = 0.6) +
+    geom_point(
+      data = df,
+      aes(x = condition, y = value),
+      inherit.aes = FALSE,
+      position = position_jitter(width = 0.08),
+      size = 2
+    ) +
+    geom_text(
+      aes(label = signif(value, 2)),
+      vjust = -0.4,
+      size = 4
+    ) +
+    labs(title = title.name, x = NULL, y = y.title) +
+    theme_classic() +
+    theme(legend.position = "none")
+}
+
+plot_donor_average_number <- function(object.list, title.name) {
+  plot_donor_average_summary(object.list, title.name, measure = "number")
+}
+
+plot_donor_average_strength <- function(object.list, title.name) {
+  plot_donor_average_summary(object.list, title.name, measure = "strength")
+}
+
+plot_average_count_heatmap <- function(object.list, title.name) {
+  avg.mat <- average_count_matrix(object.list)
+  df <- do.call(
+    rbind,
+    lapply(names(avg.mat), function(condition.use) {
+      x <- as.data.frame(as.table(avg.mat[[condition.use]]))
+      colnames(x) <- c("source", "target", "value")
+      x$condition <- condition.use
+      x
+    })
+  )
+  
+  df$source <- factor(df$source, levels = rev(rownames(avg.mat[[1]])))
+  df$target <- factor(df$target, levels = colnames(avg.mat[[1]]))
+  
+  ggplot(df, aes(x = target, y = source, fill = value)) +
+    geom_tile(color = "white", linewidth = 0.4) +
+    geom_text(aes(label = signif(value, 2)), size = 3) +
+    facet_wrap(~ condition, nrow = 1) +
+    scale_fill_gradient(low = "grey95", high = "#B2182B", name = "Mean number") +
+    coord_fixed() +
+    labs(title = title.name, x = "Target", y = "Source") +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 35, hjust = 1),
+      panel.grid = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+}
+
+plot_average_count_circle <- function(object.list, title.prefix, label.edge = FALSE) {
+  avg.mat <- average_count_matrix(object.list)
+  edge.max <- max(unlist(avg.mat))
+  
+  par(mfrow = c(1, 2), xpd = TRUE)
+  
+  for (condition.use in names(avg.mat)) {
+    CellChat::netVisual_circle(
+      avg.mat[[condition.use]],
+      weight.scale = TRUE,
+      label.edge = label.edge,
+      edge.weight.max = edge.max,
+      edge.width.max = 12,
+      title.name = paste0(title.prefix, " mean number - ", condition.use)
+    )
+  }
+}
+
+coarse_count_matrix <- function(mat) {
+  group.use <- c(eEVT = "EVT", Endothelial = "Endothelial", EVT = "EVT")
+  group.levels <- c("EVT", "Endothelial")
+  out <- matrix(0, nrow = 2, ncol = 2, dimnames = list(group.levels, group.levels))
+  
+  for (source in rownames(mat)) {
+    for (target in colnames(mat)) {
+      out[group.use[source], group.use[target]] <- out[group.use[source], group.use[target]] + mat[source, target]
+    }
+  }
+  
+  out
+}
+
+average_coarse_count_matrix <- function(object.list) {
+  out <- lapply(c("Control", "Disease"), function(condition.use) {
+    sample.use <- names(object.list)[sample.condition[names(object.list)] == condition.use]
+    mats <- lapply(object.list[sample.use], function(x) coarse_count_matrix(get_count_matrix(x)))
+    Reduce("+", mats) / length(mats)
+  })
+  names(out) <- c("Control", "Disease")
+  out
+}
+
+plot_average_coarse_count_circle <- function(object.list, title.prefix) {
+  avg.mat <- average_coarse_count_matrix(object.list)
+  edge.max <- max(unlist(avg.mat))
+  
+  par(mfrow = c(1, 2), xpd = TRUE)
+  
+  for (condition.use in names(avg.mat)) {
+    CellChat::netVisual_circle(
+      avg.mat[[condition.use]],
+      weight.scale = TRUE,
+      label.edge = TRUE,
+      edge.weight.max = edge.max,
+      edge.width.max = 12,
+      title.name = paste0(title.prefix, " coarse mean number - ", condition.use)
+    )
+  }
+}
+```
+
+# Compare the total number of interactions and interaction strength contact
+Donor-averaged interaction number and strength
+
+```{r}
+plot_donor_average_number(object.list.contact.single, "Contact interaction number") +
+  plot_donor_average_strength(object.list.contact.single, "Contact interaction strength")
+```
+
+Donor-averaged interaction number
+
+```{r}
+plot_donor_average_number(object.list.secreted.single, "Secreted interaction number")
+```
+
+Donor-averaged interaction number heatmap
+
+```{r}
+plot_average_count_heatmap(object.list.contact.single, "Contact donor-averaged interaction number")
+```
+
+secreted
+
+Donor-averaged interaction number heatmap
+
+```{r}
+plot_average_count_heatmap(object.list.secreted.single, "Secreted donor-averaged interaction number")
+```
+
+# Pooled multi-sample interaction number and strength
+
+Contact
+
+```{r}
+gg1_contact <- CellChat::compareInteractions(
   cellchat.contact,
   show.legend = FALSE,
   group = c(1, 2)
 )
 
-gg2_contact <- compareInteractions(
+gg2_contact <- CellChat::compareInteractions(
   cellchat.contact,
   show.legend = FALSE,
   group = c(1, 2),
   measure = "weight"
 )
 
-gg1_contact
-gg2_contact
+gg1_contact + gg2_contact
 ```
 
-> Note: **要改**. This is pooled Control vs pooled Disease; Control has 2 donors and Disease has 4 donors, so it is not donor-normalized.
+Secreted
 
 ```{r}
-gg1_secreted <- compareInteractions(
+gg1_secreted <- CellChat::compareInteractions(
   cellchat.secreted,
   show.legend = FALSE,
   group = c(1, 2)
 )
 
-gg2_secreted <- compareInteractions(
+gg2_secreted <- CellChat::compareInteractions(
   cellchat.secreted,
   show.legend = FALSE,
   group = c(1, 2),
@@ -105,24 +339,6 @@ gg2_secreted <- compareInteractions(
 )
 
 gg1_secreted + gg2_secreted
-```
-
-> Note: **要改**. This heatmap uses pooled condition-level interaction matrices, not per-donor averaged matrices.
-
-```{r}
-gg1_contact <- netVisual_heatmap(cellchat.contact)
-gg2_contact <- netVisual_heatmap(cellchat.contact, measure = "weight")
-gg1_contact+gg2_contact
-```
-
-secreted
-
-> Note: **要改**. This heatmap uses pooled condition-level interaction matrices, not per-donor averaged matrices.
-
-```{r}
-gg1_secreted <- netVisual_heatmap(cellchat.secreted)
-gg2_secreted <- netVisual_heatmap(cellchat.secreted, measure = "weight")
-gg1_secreted+gg2_secreted
 ```
 
 
@@ -212,6 +428,15 @@ gg_endo_contact <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
 )
 ```
 
+> Note: **中等受影响**. Signaling change scatter uses pooled centrality differences; it is not donor-normalized.
+
+```{r}
+gg_evt_contact <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
+  cellchat.contact,
+  idents.use = "EVT"
+)
+```
+
 > Note: **中等受影响**. This displays a pooled centrality-difference scatter; use only as pooled-condition evidence.
 
 ```{r}
@@ -223,6 +448,12 @@ CD80 immune cells? under stress?
 
 ```{r}
 gg_endo_contact
+```
+
+> Note: **中等受影响**. This displays a pooled centrality-difference scatter; use only as pooled-condition evidence.
+
+```{r}
+gg_evt_contact
 ```
 
 > Note: **中等受影响**. Signaling change scatter uses pooled centrality differences; it is not donor-normalized.
@@ -243,6 +474,15 @@ gg2_endo_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
 )
 ```
 
+> Note: **中等受影响**. Signaling change scatter uses pooled centrality differences; it is not donor-normalized.
+
+```{r}
+gg2_evt_secreted <- SpatialCellChat::netAnalysis_signalingChanges_scatter(
+  cellchat.secreted,
+  idents.use = "EVT"
+)
+```
+
 > Note: **中等受影响**. This displays a pooled centrality-difference scatter; use only as pooled-condition evidence.
 
 ```{r}
@@ -254,6 +494,12 @@ negative value?
 
 ```{r}
 gg2_endo_secreted
+```
+
+> Note: **中等受影响**. This displays a pooled centrality-difference scatter; use only as pooled-condition evidence.
+
+```{r}
+gg2_evt_secreted
 ```
 
 > Note: **不受影响**. Functional pathway clustering compares pathway communication patterns, not total interaction counts; describe it as pooled-condition pattern clustering.
@@ -374,27 +620,6 @@ SpatialCellChat::netVisual_embeddingPairwiseZoomIn(
 )
 ```
 
-Compute and visualize the pathway distance in the learned joint manifold contact
-
-> Note: **不受影响**. Pathway similarity ranking is about pathway pattern distance, not direct interaction-count totals.
-
-```{r}
-CellChat::rankSimilarity(
-  cellchat.contact,
-  type = "functional"
-)
-```
-
-secreted
-
-> Note: **不受影响**. Pathway similarity ranking is about pathway pattern distance, not direct interaction-count totals.
-
-```{r}
-CellChat::rankSimilarity(
-  cellchat.secreted,
-  type = "functional"
-)
-```
 
 # Identify altered signaling with distinct interaction strength (A) Compare the overall information flow of each signaling pathway or ligand-receptor pair contact
 
@@ -661,8 +886,8 @@ ComplexHeatmap::draw(
 ```{r}
 gg1 <- CellChat::netVisual_bubble(
   cellchat.contact,
-  sources.use = c("eEVT", "Endothelial"),
-  targets.use = c("eEVT", "Endothelial"),
+  sources.use = c("eEVT", "Endothelial", "EVT"),
+  targets.use = c("eEVT", "Endothelial", "EVT"),
   comparison = c(1, 2),
   max.dataset = 2,
   title.name = "Increased signaling in Disease",
@@ -672,8 +897,8 @@ gg1 <- CellChat::netVisual_bubble(
 
 gg2 <- CellChat::netVisual_bubble(
   cellchat.contact,
-  sources.use = c("eEVT", "Endothelial"),
-  targets.use = c("eEVT", "Endothelial"),
+  sources.use = c("eEVT", "Endothelial", "EVT"),
+  targets.use = c("eEVT", "Endothelial", "EVT"),
   comparison = c(1, 2),
   max.dataset = 1,
   title.name = "Decreased signaling in Disease",
@@ -690,8 +915,8 @@ meaning of color
 ```{r}
 gg1 <- CellChat::netVisual_bubble(
   cellchat.secreted,
-  sources.use = c("eEVT", "Endothelial"),
-  targets.use = c("eEVT", "Endothelial"),
+  sources.use = c("eEVT", "Endothelial", "EVT"),
+  targets.use = c("eEVT", "Endothelial", "EVT"),
   comparison = c(1, 2),
   max.dataset = 2,
   title.name = "Increased signaling in Disease",
@@ -701,8 +926,8 @@ gg1 <- CellChat::netVisual_bubble(
 
 gg2 <- CellChat::netVisual_bubble(
   cellchat.secreted,
-  sources.use = c("eEVT", "Endothelial"),
-  targets.use = c("eEVT", "Endothelial"),
+  sources.use = c("eEVT", "Endothelial", "EVT"),
+  targets.use = c("eEVT", "Endothelial", "EVT"),
   comparison = c(1, 2),
   max.dataset = 1,
   title.name = "Decreased signaling in Disease",
@@ -832,8 +1057,8 @@ pairLR.use.up.contact <- net.up.contact[, "interaction_name", drop = FALSE]
 gg1_contact <- CellChat::netVisual_bubble(
   cellchat.contact,
   pairLR.use = pairLR.use.up.contact,
-  sources.use = c("eEVT", "Endothelial"),
-  targets.use = c("eEVT", "Endothelial"),
+  sources.use = c("eEVT", "Endothelial", "EVT"),
+  targets.use = c("eEVT", "Endothelial", "EVT"),
   comparison = c(1, 2),
   angle.x = 90,
   remove.isolate = TRUE,
@@ -845,8 +1070,8 @@ pairLR.use.down.contact <- net.down.contact[, "interaction_name", drop = FALSE]
 gg2_contact <- CellChat::netVisual_bubble(
   cellchat.contact,
   pairLR.use = pairLR.use.down.contact,
-  sources.use = c("eEVT", "Endothelial"),
-  targets.use = c("eEVT", "Endothelial"),
+  sources.use = c("eEVT", "Endothelial", "EVT"),
+  targets.use = c("eEVT", "Endothelial", "EVT"),
   comparison = c(1, 2),
   angle.x = 90,
   remove.isolate = TRUE,
@@ -864,8 +1089,8 @@ pairLR.use.up <- net.up.secreted[, "interaction_name", drop = FALSE]
 gg1 <-  CellChat::netVisual_bubble(
   cellchat.secreted,
   pairLR.use = pairLR.use.up,
-  sources.use = c("eEVT", "Endothelial"),
-  targets.use = c("eEVT", "Endothelial"),
+  sources.use = c("eEVT", "Endothelial", "EVT"),
+  targets.use = c("eEVT", "Endothelial", "EVT"),
   comparison = c(1, 2),
   angle.x = 90,
   remove.isolate = TRUE,
@@ -877,8 +1102,8 @@ pairLR.use.down <- net.down.secreted[, "interaction_name", drop = FALSE]
 gg2 <-  CellChat::netVisual_bubble(
   cellchat.secreted,
   pairLR.use = pairLR.use.down,
-  sources.use = c("eEVT", "Endothelial"),
-  targets.use = c("eEVT", "Endothelial"),
+  sources.use = c("eEVT", "Endothelial", "EVT"),
+  targets.use = c("eEVT", "Endothelial", "EVT"),
   comparison = c(1, 2),
   angle.x = 90,
   remove.isolate = TRUE,
@@ -915,277 +1140,204 @@ p_notch_expr <- CellChat::plotGeneExpression(
 p_notch_expr
 ```
 
-# Circle plot of interaction number and strength across datasets
+
+# Circle plot of interaction number across datasets
 
 Contact
 
-> Note: **要改**. Circle plot uses pooled count matrices; not donor-normalized.
+Donor-averaged interaction number circle plot
 
 ```{r}
-weight.max.contact <- CellChat::getMaxWeight(
-  object.list.contact,
-  attribute = c("count", "weight")
-)
-
-par(mfrow = c(1, 2), xpd = TRUE)
-
-for (i in seq_along(object.list.contact)) {
-  CellChat::netVisual_circle(
-    object.list.contact[[i]]@net$count,
-    weight.scale = TRUE,
-    label.edge = FALSE,
-    edge.weight.max = weight.max.contact[1],
-    edge.width.max = 12,
-    title.name = paste0("Contact number - ", names(object.list.contact)[i])
-  )
-}
-```
-
-> Note: **要改**. Circle plot uses pooled weight matrices; not donor-normalized.
-
-```{r}
-par(mfrow = c(1, 2), xpd = TRUE)
-
-for (i in seq_along(object.list.contact)) {
-  CellChat::netVisual_circle(
-    object.list.contact[[i]]@net$weight,
-    weight.scale = TRUE,
-    label.edge = FALSE,
-    edge.weight.max = weight.max.contact[2],
-    edge.width.max = 12,
-    title.name = paste0("Contact strength - ", names(object.list.contact)[i])
-  )
-}
+plot_average_count_circle(object.list.contact.single, "Contact")
 ```
 
 Secreted
 
-> Note: **要改**. Circle plot uses pooled count matrices; not donor-normalized.
+Donor-averaged interaction number circle plot
 
 ```{r}
-weight.max.secreted <- CellChat::getMaxWeight(
-  object.list.secreted,
-  attribute = c("count", "weight")
-)
-
-par(mfrow = c(1, 2), xpd = TRUE)
-
-for (i in seq_along(object.list.secreted)) {
-  CellChat::netVisual_circle(
-    object.list.secreted[[i]]@net$count,
-    weight.scale = TRUE,
-    label.edge = FALSE,
-    edge.weight.max = weight.max.secreted[1],
-    edge.width.max = 12,
-    title.name = paste0("Secreted number - ", names(object.list.secreted)[i])
-  )
-}
-```
-
-> Note: **要改**. Circle plot uses pooled weight matrices; not donor-normalized.
-
-```{r}
-par(mfrow = c(1, 2), xpd = TRUE)
-
-for (i in seq_along(object.list.secreted)) {
-  CellChat::netVisual_circle(
-    object.list.secreted[[i]]@net$weight,
-    weight.scale = TRUE,
-    label.edge = FALSE,
-    edge.weight.max = weight.max.secreted[2],
-    edge.width.max = 12,
-    title.name = paste0("Secreted strength - ", names(object.list.secreted)[i])
-  )
-}
+plot_average_count_circle(object.list.secreted.single, "Secreted")
 ```
 
 # Circle plot of coarse cell-type communication
 
 Contact
 
-```{r}
-group.cellType.contact <- c(
-  eEVT = "EVT",
-  Endothelial = "Endothelial",
-  EVT = "EVT"
-)
-
-object.list.contact.coarse <- lapply(object.list.contact, function(x) {
-  group.use <- factor(
-    group.cellType.contact[levels(x@idents)],
-    levels = c("EVT", "Endothelial")
-  )
-  
-  CellChat::mergeInteractions(
-    x,
-    group.use
-  )
-})
-
-cellchat.contact.coarse <- mergeSpatialCellChat(
-  object.list.contact.coarse,
-  add.names = names(object.list.contact.coarse),
-  cell.prefix = TRUE
-)
-```
-
-> Note: **要改**. Coarse circle plot uses pooled merged count matrices; not donor-normalized.
+Donor-averaged coarse interaction number circle plot
 
 ```{r}
-weight.max.contact.coarse <- CellChat::getMaxWeight(
-  object.list.contact.coarse,
-  slot.name = c("net", "net"),
-  attribute = c("count", "count.merged")
-)
-
-par(mfrow = c(1, 2), xpd = TRUE)
-
-for (i in seq_along(object.list.contact.coarse)) {
-  CellChat::netVisual_circle(
-    object.list.contact.coarse[[i]]@net$count.merged,
-    weight.scale = TRUE,
-    label.edge = TRUE,
-    edge.weight.max = weight.max.contact.coarse[2],
-    edge.width.max = 12,
-    title.name = paste0("Contact coarse number - ", names(object.list.contact.coarse)[i])
-  )
-}
-```
-
-> Note: **要改**. Coarse circle plot uses pooled merged weight matrices; not donor-normalized.
-
-```{r}
-weight.max.contact.coarse.weight <- CellChat::getMaxWeight(
-  object.list.contact.coarse,
-  slot.name = c("net", "net"),
-  attribute = c("weight", "weight.merged")
-)
-
-par(mfrow = c(1, 2), xpd = TRUE)
-
-for (i in seq_along(object.list.contact.coarse)) {
-  CellChat::netVisual_circle(
-    object.list.contact.coarse[[i]]@net$weight.merged,
-    weight.scale = TRUE,
-    label.edge = TRUE,
-    edge.weight.max = weight.max.contact.coarse.weight[2],
-    edge.width.max = 12,
-    title.name = paste0("Contact coarse strength - ", names(object.list.contact.coarse)[i])
-  )
-}
-```
-
-> Note: **要改**. Differential coarse network is pooled Control vs pooled Disease, not donor-normalized.
-
-```{r}
-par(mfrow = c(1, 2), xpd = TRUE)
-
-CellChat::netVisual_diffInteraction(
-  cellchat.contact.coarse,
-  weight.scale = TRUE,
-  measure = "count.merged",
-  label.edge = TRUE
-)
-
-CellChat::netVisual_diffInteraction(
-  cellchat.contact.coarse,
-  weight.scale = TRUE,
-  measure = "weight.merged",
-  label.edge = TRUE
-)
+plot_average_coarse_count_circle(object.list.contact.single, "Contact")
 ```
 
 Secreted
 
+Donor-averaged coarse interaction number circle plot
+
 ```{r}
-group.cellType.secreted <- c(
-  eEVT = "EVT",
-  Endothelial = "Endothelial",
-  EVT = "EVT"
+plot_average_coarse_count_circle(object.list.secreted.single, "Secreted")
+```
+
+# Cell identity and key LR quality check
+
+```{r}
+obj_six <- readRDS(
+  "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_six_donors_Myometrium.rds"
 )
 
-object.list.secreted.coarse <- lapply(object.list.secreted, function(x) {
-  group.use <- factor(
-    group.cellType.secreted[levels(x@idents)],
-    levels = c("EVT", "Endothelial")
+DefaultAssay(obj_six) <- "Xenium"
+
+identity_marker_panels <- list(
+  `immune genes` = c(
+    "CTLA4", "PDCD1",
+    "NKG7", "KLRD1", "GNLY",
+    "LST1", "TYROBP", "FCER1G",
+    "LILRB2", "MRC1",
+    "CEACAM8", "CCR3",
+    "CCR4", "CCR5", "CCR7",
+    "CXCR5", "CXCR6"
+  ),
+  `chemokine program` = c(
+    "TNF",
+    "CCL3", "CCL3L1",
+    "CCL4", "CCL5",
+    "CXCL13"
+  ),
+  `MHC-I / lineage check` = c(
+    "HLA-G", "HLA-B",
+    "CD8A", "CD8B",
+    "PTPRC", "TRAC", "CD3D", "CD3E",
+    "KRT7", "ITGA5", "MMP2",
+    "PECAM1", "VWF"
+  )
+)
+
+key_lr_gene_panels <- list(
+  `contact LR hits` = c(
+    "CEACAM1", "CEACAM6",
+    "NCAM1",
+    "JAG1", "NOTCH2",
+    "CD80", "CTLA4",
+    "CD274", "PDCD1LG2",
+    "SELL",
+    "ICOS",
+    "LCK",
+    "HLA-G", "HLA-B"
+  ),
+  `secreted LR hits` = c(
+    "VEGFA", "FLT1", "KDR",
+    "IL1B", "IL1R1",
+    "IL2", "IL2RG",
+    "IL4", "IL4R",
+    "TNF", "TNFRSF1A",
+    "CCL2", "CCL5",
+    "CCR1", "CCR5",
+    "CXCL8", "CXCL12", "CXCR4",
+    "SPP1", "CD44",
+    "CLEC11A", "KIT",
+    "LEP", "LEPR"
+  )
+)
+
+keep_present_markers <- function(obj, marker.panels) {
+  panel.genes <- rownames(obj[["Xenium"]])
+  markers.present <- lapply(
+    marker.panels,
+    function(x) intersect(x, panel.genes)
+  )
+  markers.present[lengths(markers.present) > 0]
+}
+
+make_identity_check <- function(obj, condition.use) {
+  obj_sub <- subset(
+    obj,
+    subset = donor %in% names(sample.condition)[sample.condition == condition.use] &
+      CellTypeManual.l2 %in% c("eEVT", "Endothelial", "EVT")
   )
   
-  CellChat::mergeInteractions(
-    x,
-    group.use
+  obj_sub$CellTypeManual.l2 <- factor(
+    obj_sub$CellTypeManual.l2,
+    levels = c("eEVT", "Endothelial", "EVT")
   )
-})
+  
+  markers.present <- keep_present_markers(obj_sub, identity_marker_panels)
+  
+  Seurat::DotPlot(
+    obj_sub,
+    features = markers.present,
+    group.by = "CellTypeManual.l2",
+    assay = "Xenium",
+    scale = TRUE,
+    dot.scale = 6
+  ) +
+    Seurat::RotatedAxis() +
+    labs(
+      title = paste0(condition.use, ": eEVT, Endothelial and EVT identity check"),
+      x = "Marker genes",
+      y = "Cell identity"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5),
+      strip.text = element_text(size = 8)
+    )
+}
 
-cellchat.secreted.coarse <- mergeSpatialCellChat(
-  object.list.secreted.coarse,
-  add.names = names(object.list.secreted.coarse),
-  cell.prefix = TRUE
-)
-```
-
-> Note: **要改**. Coarse circle plot uses pooled merged count matrices; not donor-normalized.
-
-```{r}
-weight.max.secreted.coarse <- CellChat::getMaxWeight(
-  object.list.secreted.coarse,
-  slot.name = c("net", "net"),
-  attribute = c("count", "count.merged")
-)
-
-par(mfrow = c(1, 2), xpd = TRUE)
-
-for (i in seq_along(object.list.secreted.coarse)) {
-  CellChat::netVisual_circle(
-    object.list.secreted.coarse[[i]]@net$count.merged,
-    weight.scale = TRUE,
-    label.edge = TRUE,
-    edge.weight.max = weight.max.secreted.coarse[2],
-    edge.width.max = 12,
-    title.name = paste0("Secreted coarse number - ", names(object.list.secreted.coarse)[i])
+make_key_lr_check <- function(obj, condition.use) {
+  obj_sub <- subset(
+    obj,
+    subset = donor %in% names(sample.condition)[sample.condition == condition.use] &
+      CellTypeManual.l2 %in% c("eEVT", "Endothelial", "EVT")
   )
+  
+  obj_sub$CellTypeManual.l2 <- factor(
+    obj_sub$CellTypeManual.l2,
+    levels = c("eEVT", "Endothelial", "EVT")
+  )
+  
+  markers.present <- keep_present_markers(obj_sub, key_lr_gene_panels)
+  
+  Seurat::DotPlot(
+    obj_sub,
+    features = markers.present,
+    group.by = "CellTypeManual.l2",
+    assay = "Xenium",
+    scale = TRUE,
+    dot.scale = 3.2,
+    dot.min = 0.01
+  ) +
+    Seurat::RotatedAxis() +
+    labs(
+      title = paste0(condition.use, ": key LR gene check"),
+      x = "Key LR genes",
+      y = "Cell type"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 7),
+      axis.text.y = element_text(size = 9),
+      axis.title.x = element_text(size = 10),
+      axis.title.y = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5, size = 11),
+      strip.text = element_text(size = 7),
+      legend.text = element_text(size = 7),
+      legend.title = element_text(size = 8),
+      panel.spacing = unit(0.8, "lines")
+    )
 }
 ```
 
-> Note: **要改**. Coarse circle plot uses pooled merged weight matrices; not donor-normalized.
+## Cell identity QC
 
-```{r}
-weight.max.secreted.coarse.weight <- CellChat::getMaxWeight(
-  object.list.secreted.coarse,
-  slot.name = c("net", "net"),
-  attribute = c("weight", "weight.merged")
-)
-
-par(mfrow = c(1, 2), xpd = TRUE)
-
-for (i in seq_along(object.list.secreted.coarse)) {
-  CellChat::netVisual_circle(
-    object.list.secreted.coarse[[i]]@net$weight.merged,
-    weight.scale = TRUE,
-    label.edge = TRUE,
-    edge.weight.max = weight.max.secreted.coarse.weight[2],
-    edge.width.max = 12,
-    title.name = paste0("Secreted coarse strength - ", names(object.list.secreted.coarse)[i])
-  )
+```{r, fig.width=10, fig.height=5}
+for (condition.use in c("Control", "Disease")) {
+  print(make_identity_check(obj_six, condition.use))
 }
 ```
 
-> Note: **要改**. Differential coarse network is pooled Control vs pooled Disease, not donor-normalized.
+## Key LR gene QC
 
-```{r}
-par(mfrow = c(1, 2), xpd = TRUE)
-
-CellChat::netVisual_diffInteraction(
-  cellchat.secreted.coarse,
-  weight.scale = TRUE,
-  measure = "count.merged",
-  label.edge = TRUE
-)
-
-CellChat::netVisual_diffInteraction(
-  cellchat.secreted.coarse,
-  weight.scale = TRUE,
-  measure = "weight.merged",
-  label.edge = TRUE
-)
+```{r, fig.width=10, fig.height=5}
+for (condition.use in c("Control", "Disease")) {
+  print(make_key_lr_check(obj_six, condition.use))
+}
 ```
-

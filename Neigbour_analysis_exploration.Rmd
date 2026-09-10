@@ -58,12 +58,12 @@ Modify the code above to output the nearests neighbour per region (decidua and m
 
 1) Explore the function nn2: We use k=2, can you extract and plot the Euclidean distances and visualise the results on a plot? 
 2) Is this a non-directional or directional neighbourhood? 
-3) Using k=2, try two normalisations: 1) Total and 2) Conditional and make a plot of these per region (perhaps a heatmap)
+3) Using k=2, try two normalisations: 1) Sum and 2) Total and make a plot of these per region (perhaps a heatmap)
 4) We would like to know how the results change depending on the size of the neighbourhood. Try different values of k (for instance, k=3 and k=10). Hint: make a function that takes k and outputs a dataframe you use to make a plot.
 
 ```{r, eval=FALSE}
 # # Use ? to check a function.
- ?nn2
+#?nn2
 # #Function nn2:
 # It uses a kd-tree to find the p number of nearest neighbors for each point in the input/output dataset. The advantage of kd-tree is that it runs in O(MlogM) time.
 # 
@@ -202,7 +202,7 @@ build_knn_table <- function(cell_metadata,
 }
 
 summarise_neighbour_pairs <- function(neighbour_table,
-                                      normalisation = c("conditional", "total"),
+                                      normalisation = c("sum", "total"),
                                       cell_types = target_cell_types,
                                       regions = target_regions) {
   normalisation <- match.arg(normalisation)
@@ -221,7 +221,7 @@ summarise_neighbour_pairs <- function(neighbour_table,
       fill = list(count = 0)
     )
   
-  if (normalisation == "conditional") {
+  if (normalisation == "total") {
     pair_counts <- pair_counts %>%
       group_by(cell_region, cell_type)
   } else {
@@ -375,7 +375,7 @@ plot_cell_region_distribution <- function(cell_metadata,
 
 ```
 
-Visualization by region
+#Visualization by region
 ```{r}
 plot_cell_region_distribution(
   df_control_fvb,
@@ -395,35 +395,36 @@ nn_table <- build_knn_table(
 head(nn_table)
 ```
 ```{r}
-pair_summary_total <- summarise_neighbour_pairs(
+pair_summary_sum <- summarise_neighbour_pairs(
   neighbour_table = nn_table,
-  normalisation = "total"
+  normalisation = "sum"
 )
 
 plot_neighbour_heatmap(
-  pair_summary_total,
-  plot_title = "Control FVB nearest-neighbour preference, total normalisation"
+  pair_summary_sum,
+  plot_title = "Control FVB nearest-neighbour preference, sum normalisation"
 )
 ```
 ```{r}
 nn_prop_table_region <- summarise_neighbour_pairs(
   neighbour_table = nn_table,
-  normalisation = "conditional"
+  normalisation = "total"
 )
 
 p_control_heatmap_k1 <- plot_neighbour_heatmap(
   nn_prop_table_region,
-  plot_title = "Control FVB nearest-neibour preference, conditional normalization"
+  plot_title = "Control FVB nearest-neibour preference, total normalization"
 )
 p_control_heatmap_k1
 ```
+#Summary data for each nearest neighbor pairs
 ```{r}
 nn_summary_table <- nn_table %>%
   filter(
     cell_type %in% target_cell_types,
     nearest_cell_type %in% target_cell_types
   ) %>%
-  # group_by(cell_region, cell_type, nearest_cell_type) %>%
+  group_by(cell_region, cell_type, nearest_cell_type) %>%
   summarise(
     count = n(),
     mean_distance = mean(distance, na.rm = TRUE),
@@ -447,10 +448,11 @@ nn_summary_table <- nn_table %>%
 
 nn_summary_table
 ```
+#Box plot
 ```{r}
 plot_neighbour_distances(nn_table)
 ```
-
+#Violin plot
 ```{r}
 #Keep 99 percentile to make the plot less biased
 nn_table_plot <- nn_table %>%
@@ -485,6 +487,7 @@ ggplot(nn_table_plot, aes(x = pair, y = distance, fill = pair)) +
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 ```
+#Increasing k
 ```{r}
 make_neighbour_proportion <- function(cell_metadata, n_neighbours = 10) {
   neighbour_table <- build_knn_table(
@@ -496,7 +499,7 @@ make_neighbour_proportion <- function(cell_metadata, n_neighbours = 10) {
   
   pair_table <- summarise_neighbour_pairs(
     neighbour_table = neighbour_table,
-    normalisation = "conditional"
+    normalisation = "total"
   )
   
   heatmap <- plot_neighbour_heatmap(
@@ -536,8 +539,8 @@ Conclusion:
 3.The endo-eEVT mixing is stronger in decidua than in muscle from k=2 to k=30
 4.As k is increasing, the NEP between the two cell types increases
 
-```{r}
 #Calculate the average distance for each value of k
+```{r}
 k_distance_values <- c(2, 10, 30, 50, 100)
 
 k_distance_table <- lapply(k_distance_values, function(k) {
@@ -559,8 +562,8 @@ k_distance_table <- lapply(k_distance_values, function(k) {
 k_distance_table
 ```
 
-```{r}
 #Cozi calculation
+```{r}
 library("coziR")
 cozi_input <- df_control_fvb %>%
   filter(
@@ -584,19 +587,16 @@ res_cozi_control <- run_cozi(
 res_cozi_control$cond_ratio
 res_cozi_control$zscore
 ```
-
 CCR: Most eEVT has a neighbouring endothelial cell, while only a small fraction of endothelial cells have eEVT neighbours. This suggests directionality.
 Z score: 60.7 might suggest a strong spatial pattern.
 
-Disease dataset：
+#Disease dataset：
 ```{r}
 obj_disease_fam <- readRDS(file = "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Data/Spatial_Xenium_donor_FAM_Myometrium.rds")
 head(obj_disease_fam@meta.data)
 ```
-How many cells are there per region
-```{r}
-table(obj_disease_fam@meta.data$CellTypeManual.l2, obj_disease_fam@meta.data$regions)
-```
+
+#How many cells are there per region
 ```{r}
 table(obj_disease_fam@meta.data$CellTypeManual.l2, obj_disease_fam@meta.data$regions)
 ```
@@ -611,15 +611,17 @@ df_disease_fam <- obj_disease_fam@meta.data %>%
     CellTypeManual.l2
   )
 ```
-Visualization by region
+
+#Visualization by region
 ```{r}
 plot_cell_region_distribution(
   df_disease_fam,
   plot_title = "Disease FAM: spatial distribution of eEVT and Endothelial cells by region"
 )
 ```
-```{r}
+
 # Build the nearest-neighbour table within each tissue region.
+```{r}
 nn_table_disease_fam <- build_knn_table(
   cell_metadata = df_disease_fam,
   n_neighbours = 1,
@@ -632,16 +634,16 @@ head(nn_table_disease_fam)
 ```{r}
 nn_prop_table_region_disease_fam <- summarise_neighbour_pairs(
   neighbour_table = nn_table_disease_fam,
-  normalisation = "conditional"
+  normalisation = "total"
 )
 p_disease_heatmap_k1 <- plot_neighbour_heatmap(
   nn_prop_table_region_disease_fam,
-  plot_title = "Disease FAM Nearest Neighbor Preference, Conditional Normalization"
+  plot_title = "Disease FAM Nearest Neighbor Preference, total Normalization"
 )
 p_disease_heatmap_k1
 ```
-```{r}
 #Summary data for each nereast neighbor pairs
+```{r}
 nn_summary_table_disease_fam <- nn_table_disease_fam %>%
   filter(
     cell_type %in% target_cell_types,
@@ -671,9 +673,6 @@ nn_summary_table_disease_fam <- nn_table_disease_fam %>%
 nn_summary_table_disease_fam
 ```
 ```{r}
-plot_neighbour_distances(nn_table_disease_fam)
-```
-```{r}
 nn_table_plot_disease_fam <- nn_table_disease_fam %>%
   filter(
     cell_type %in% target_cell_types,
@@ -690,7 +689,12 @@ nn_table_plot_disease_fam <- nn_table_disease_fam %>%
     )
   )
 ymax_disease_fam <- quantile(nn_table_plot_disease_fam$distance, 0.99, na.rm = TRUE)
+```
 
+```{r}
+plot_neighbour_distances(nn_table_disease_fam)
+```
+```{r}
 ggplot(nn_table_plot_disease_fam, aes(x = pair, y = distance, fill = pair)) +
   geom_violin(trim = FALSE, alpha = 0.7) +
   facet_wrap(~ cell_region) +
@@ -706,6 +710,7 @@ ggplot(nn_table_plot_disease_fam, aes(x = pair, y = distance, fill = pair)) +
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 ```
+#Run COZI
 ```{r}
 cozi_input_disease_fam <- df_disease_fam %>%
   filter(
@@ -728,6 +733,8 @@ res_cozi_disease <- run_cozi(
 res_cozi_disease$cond_ratio
 res_cozi_disease$zscore
 ```
+
+#Calculate proportion of each cell types in two datasets
 ```{r}
 # Count eEVT and Endothelial cells from your existing Seurat objects
 cell_counts <- bind_rows(
@@ -787,13 +794,9 @@ p_disease_heatmap_k1
 ```
 2.The directionality is more extreme. The directionality from eEVT to endothelial cells still exists, but directionality in another direction is completely lost.
 
-```{r}
-for (result_name in names(neighbour_results_by_k_disease_fam)) {
-  print(neighbour_results_by_k_disease_fam[[result_name]]$heatmap)
-}
-```
 3. As k increases, the pairwise NEP seems to be also increasing. However, I don't think this is biologically meaningful, as when k increases, the neibors of eEVT can only be endothelial cells since there are only 15 of them.
 
+#Wilcoxon rank test
 ```{r}
 make_distance_summary <- function(nn_table, dataset_name) {
   
@@ -829,6 +832,7 @@ distance_summary_long <- bind_rows(
 
 distance_summary_long
 ```
+
 ```{r}
 distance_test_data <- bind_rows(
   nn_table %>%
@@ -977,8 +981,8 @@ res_cozi_disease$zscore
 
 5.The most substantial change occurs in CCR score from endothelial cells to eEVT. It decreases from 0.076 to 0.0084, which is a ten fold change. In addition, z-score in disease sample between eEVT to eEVT decreases from 41 to 4.33, suggesting reduced self clustering?
 
-```{r}
 #Cozi plot
+```{r}
 p_control <- cozi_dotplot(
   res_cozi_control,
   title = "Control FVB"

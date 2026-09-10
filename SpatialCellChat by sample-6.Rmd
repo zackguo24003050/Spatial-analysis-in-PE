@@ -1221,6 +1221,33 @@ object.list.tnf.single <- list(
 object.list.notch.single <- object.list.notch.single[sample.order]
 object.list.tnf.single <- object.list.tnf.single[sample.order]
 
+region_celltype_cols <- c(
+  "decidua eEVT" = "#B2182B",
+  "decidua Endothelial" = "#2166AC",
+  "decidua EVT" = "#1B7837",
+  "muscle eEVT" = "#EF8A62",
+  "muscle Endothelial" = "#67A9CF",
+  "muscle EVT" = "#7FBF7B"
+)
+
+make_region_celltype_spatial_plot <- function(chat, sample_id, point.size = 1.2) {
+  chat.region <- chat
+  region.idents <- factor(
+    paste(chat@meta$regions, as.character(chat@idents)),
+    levels = names(region_celltype_cols)
+  )
+  names(region.idents) <- names(chat@idents)
+  chat.region@idents <- region.idents
+  
+  SpatialCellChat::spatialDimPlot(
+    chat.region,
+    point.size = point.size
+  ) +
+    ggtitle(sample_id) +
+    scale_color_manual(values = region_celltype_cols, limits = names(region_celltype_cols), drop = FALSE) +
+    scale_fill_manual(values = region_celltype_cols, limits = names(region_celltype_cols), drop = FALSE)
+}
+
 compute_single_pathway_centrality <- function(chat) {
   SpatialCellChat::netAnalysis_computeCentrality(
     chat,
@@ -1233,7 +1260,31 @@ compute_single_pathway_centrality <- function(chat) {
 object.list.notch.single <- lapply(object.list.notch.single, compute_single_pathway_centrality)
 object.list.tnf.single <- lapply(object.list.tnf.single, compute_single_pathway_centrality)
 
-plot_single_pathway_score <- function(p_spatial, chat, pathway.show, point.size = 1) {
+plot_single_pathway_score <- function(p_spatial, chat, pathway.show, sample_id = NULL, point.size = 1) {
+  pathway.available <- if ("centr.cell" %in% names(chat@netP) &&
+                           !is.null(dimnames(chat@netP$centr.cell)[[3]])) {
+    dimnames(chat@netP$centr.cell)[[3]]
+  } else if ("pathways.cell" %in% names(chat@netP)) {
+    chat@netP$pathways.cell
+  } else {
+    chat@netP$pathways
+  }
+  
+  if (!pathway.show %in% pathway.available) {
+    message(pathway.show, " is not available for cell-level scoring in this CellChat object.")
+    return(NULL)
+  }
+  
+  if (is.null(sample_id)) {
+    sample_id <- unique(chat@meta$donor)[1]
+  }
+  
+  p_region_celltype <- make_region_celltype_spatial_plot(
+    chat,
+    sample_id = sample_id,
+    point.size = point.size
+  )
+    
   g1 <- SpatialCellChat::spatialVisual_scoring(
     chat,
     signaling = pathway.show,
@@ -1263,33 +1314,97 @@ plot_single_pathway_score <- function(p_spatial, chat, pathway.show, point.size 
     do.group = FALSE,
     merge = TRUE,
     do.binary = FALSE,
+    color.heatmap = c("Blues", "Reds", "Purples"),
     point.size = point.size
   )
   
-  patchwork::wrap_plots(p_spatial, g1, g2, g3, ncol = 4)
+  patchwork::wrap_plots(
+    p_region_celltype,
+    g1,
+    g2,
+    g3,
+    ncol = 4
+  )
 }
 ```
 
 ## NOTCH single-cell pathway scores
 
 ```{r, fig.width=16, fig.height=4}
-plot_single_pathway_score(p_fvb, object.list.notch.single$FVB, "NOTCH")
-plot_single_pathway_score(p_fvq, object.list.notch.single$FVQ, "NOTCH")
-plot_single_pathway_score(p_fam, object.list.notch.single$FAM, "NOTCH")
-plot_single_pathway_score(p_fcm, object.list.notch.single$FCM, "NOTCH")
-plot_single_pathway_score(p_fep, object.list.notch.single$FEP, "NOTCH")
-plot_single_pathway_score(p_fvs, object.list.notch.single$FVS, "NOTCH")
+plot_single_pathway_score(p_fvb, object.list.notch.single$FVB, "NOTCH", sample_id = "FVB")
+plot_single_pathway_score(p_fvq, object.list.notch.single$FVQ, "NOTCH", sample_id = "FVQ")
+plot_single_pathway_score(p_fam, object.list.notch.single$FAM, "NOTCH", sample_id = "FAM")
+plot_single_pathway_score(p_fcm, object.list.notch.single$FCM, "NOTCH", sample_id = "FCM")
+plot_single_pathway_score(p_fep, object.list.notch.single$FEP, "NOTCH", sample_id = "FEP")
+plot_single_pathway_score(p_fvs, object.list.notch.single$FVS, "NOTCH", sample_id = "FVS")
 ```
 
 ## TNF single-cell pathway scores
 
 ```{r, fig.width=16, fig.height=4}
-plot_single_pathway_score(p_fvb, object.list.tnf.single$FVB, "TNF")
-plot_single_pathway_score(p_fvq, object.list.tnf.single$FVQ, "TNF")
-plot_single_pathway_score(p_fam, object.list.tnf.single$FAM, "TNF")
-plot_single_pathway_score(p_fcm, object.list.tnf.single$FCM, "TNF")
-plot_single_pathway_score(p_fep, object.list.tnf.single$FEP, "TNF")
-plot_single_pathway_score(p_fvs, object.list.tnf.single$FVS, "TNF")
+plot_single_pathway_score(p_fvb, object.list.tnf.single$FVB, "TNF", sample_id = "FVB")
+plot_single_pathway_score(p_fvq, object.list.tnf.single$FVQ, "TNF", sample_id = "FVQ")
+plot_single_pathway_score(p_fam, object.list.tnf.single$FAM, "TNF", sample_id = "FAM")
+plot_single_pathway_score(p_fcm, object.list.tnf.single$FCM, "TNF", sample_id = "FCM")
+plot_single_pathway_score(p_fep, object.list.tnf.single$FEP, "TNF", sample_id = "FEP")
+plot_single_pathway_score(p_fvs, object.list.tnf.single$FVS, "TNF", sample_id = "FVS")
+```
+## IL1 single-cell pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_single_pathway_score(p_fvb, object.list.tnf.single$FVB, "IL1", sample_id = "FVB")
+plot_single_pathway_score(p_fvq, object.list.tnf.single$FVQ, "IL1", sample_id = "FVQ")
+plot_single_pathway_score(p_fam, object.list.tnf.single$FAM, "IL1", sample_id = "FAM")
+plot_single_pathway_score(p_fcm, object.list.tnf.single$FCM, "IL1", sample_id = "FCM")
+plot_single_pathway_score(p_fep, object.list.tnf.single$FEP, "IL1", sample_id = "FEP")
+plot_single_pathway_score(p_fvs, object.list.tnf.single$FVS, "IL1", sample_id = "FVS")
 ```
 
+## VEGF single-cell pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_single_pathway_score(p_fvb, object.list.tnf.single$FVB, "VEGF", sample_id = "FVB")
+plot_single_pathway_score(p_fvq, object.list.tnf.single$FVQ, "VEGF", sample_id = "FVQ")
+plot_single_pathway_score(p_fam, object.list.tnf.single$FAM, "VEGF", sample_id = "FAM")
+plot_single_pathway_score(p_fcm, object.list.tnf.single$FCM, "VEGF", sample_id = "FCM")
+plot_single_pathway_score(p_fep, object.list.tnf.single$FEP, "VEGF", sample_id = "FEP")
+plot_single_pathway_score(p_fvs, object.list.tnf.single$FVS, "VEGF", sample_id = "FVS")
+```
+
+## NCAM single-cell pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_single_pathway_score(p_fvb, object.list.notch.single$FVB, "NCAM", sample_id = "FVB")
+plot_single_pathway_score(p_fvq, object.list.notch.single$FVQ, "NCAM", sample_id = "FVQ")
+plot_single_pathway_score(p_fam, object.list.notch.single$FAM, "NCAM", sample_id = "FAM")
+plot_single_pathway_score(p_fcm, object.list.notch.single$FCM, "NCAM", sample_id = "FCM")
+plot_single_pathway_score(p_fep, object.list.notch.single$FEP, "NCAM", sample_id = "FEP")
+plot_single_pathway_score(p_fvs, object.list.notch.single$FVS, "NCAM", sample_id = "FVS")
+```
+
+## PD-L1 single-cell pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_single_pathway_score(p_fvb, object.list.notch.single$FVB, "PD-L1", sample_id = "FVB")
+plot_single_pathway_score(p_fvq, object.list.notch.single$FVQ, "PD-L1", sample_id = "FVQ")
+plot_single_pathway_score(p_fam, object.list.notch.single$FAM, "PD-L1", sample_id = "FAM")
+plot_single_pathway_score(p_fcm, object.list.notch.single$FCM, "PD-L1", sample_id = "FCM")
+plot_single_pathway_score(p_fep, object.list.notch.single$FEP, "PD-L1", sample_id = "FEP")
+plot_single_pathway_score(p_fvs, object.list.notch.single$FVS, "PD-L1", sample_id = "FVS")
+```
+
+## LEP single-cell pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_single_pathway_score(p_fvb, object.list.tnf.single$FVB, "LEP", sample_id = "FVB")
+plot_single_pathway_score(p_fvq, object.list.tnf.single$FVQ, "LEP", sample_id = "FVQ")
+plot_single_pathway_score(p_fam, object.list.tnf.single$FAM, "LEP", sample_id = "FAM")
+plot_single_pathway_score(p_fcm, object.list.tnf.single$FCM, "LEP", sample_id = "FCM")
+plot_single_pathway_score(p_fep, object.list.tnf.single$FEP, "LEP", sample_id = "FEP")
+plot_single_pathway_score(p_fvs, object.list.tnf.single$FVS, "LEP", sample_id = "FVS")
+```
+
+## IL2 single-cell pathway scores NO
+
+## IL4 single-cell pathway scores NO
 

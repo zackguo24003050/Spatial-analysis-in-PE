@@ -255,16 +255,45 @@ run_multisample_condition_cellchat <- function(dataset, donors_use, signaling.ty
   
   
   ##Filtering
+
+  cellchat <- filterProbability(cellchat)
   
   cellchat <- filterCommunication(
     cellchat,
-    min.cells = 10
+    min.cells = NULL,
+    min.links = 10,
+    min.cells.sr = 10
+  )
+  
+  
+  ##Calculate group-level LR communication probability
+  
+  cellchat <- computeAvgCommunProb(
+    cellchat,
+    avg.type = "avg",
+    min.percent = 0.1,
+    min.cells.sr = 10,
+    do.permutation = TRUE,
+    nboot = 100,
+    seed.use = 1L
+  )
+  
+  cellchat <- filterCommunication(
+    cellchat,
+    min.cells = 10,
+    min.links = NULL,
+    min.cells.sr = NULL
   )
   
   
   ##Infer the cell-cell communication at a signaling pathway level
   
-  cellchat <- computeCommunProbPathway(cellchat)
+  cellchat <- computeCommunProbPathway(
+    cellchat,
+    thresh = 0.05,
+    do.group = TRUE,
+    do.cell = FALSE
+  )
   
   
   ##Calculate the aggregated cell-cell communication network
@@ -311,6 +340,18 @@ cellchat.control.secreted <- run_multisample_condition_cellchat(
   donors_use = c("FVB", "FVQ"),
   signaling.type = "secreted"
 )
+
+cellchat.disease.contact <- run_multisample_condition_cellchat(
+  dataset = obj_six,
+  donors_use = c("FCM", "FEP", "FVS", "FAM"),
+  signaling.type = "contact"
+)
+
+cellchat.disease.secreted <- run_multisample_condition_cellchat(
+  dataset = obj_six,
+  donors_use = c("FCM", "FEP", "FVS", "FAM"),
+  signaling.type = "secreted"
+)
 ```
 #Save RDS
 ```{r}
@@ -331,5 +372,219 @@ saveRDS(
     "cellchat_control_multi_secreted_range250_final.rds"
   )
 )
+
+saveRDS(
+  cellchat.disease.contact,
+  file.path(
+    output_data_dir,
+    "cellchat_disease_multi_contactRange20_final.rds"
+  )
+)
+
+saveRDS(
+  cellchat.disease.secreted,
+  file.path(
+    output_data_dir,
+    "cellchat_disease_multi_secreted_range250_final.rds"
+  )
+)
+```
+
+# Visualize multi-sample pathway scores
+
+```{r}
+multi_sample_dir <- "C:/Bioinfo General/Spatial Analysis/Spatial analysis project/Output/Data/multi_sample_cellchat"
+
+cellchat.control.contact <- readRDS(
+  file.path(multi_sample_dir, "cellchat_control_multi_contactRange20_final.rds")
+)
+
+cellchat.disease.contact <- readRDS(
+  file.path(multi_sample_dir, "cellchat_disease_multi_contactRange20_final.rds")
+)
+
+cellchat.control.secreted <- readRDS(
+  file.path(multi_sample_dir, "cellchat_control_multi_secreted_range250_final.rds")
+)
+
+cellchat.disease.secreted <- readRDS(
+  file.path(multi_sample_dir, "cellchat_disease_multi_secreted_range250_final.rds")
+)
+
+compute_multi_single_pathway_centrality <- function(chat) {
+  SpatialCellChat::netAnalysis_computeCentrality(
+    chat,
+    slot.name = "netP",
+    do.group = FALSE,
+    degree.only = TRUE
+  )
+}
+
+cellchat.control.contact <- compute_multi_single_pathway_centrality(cellchat.control.contact)
+cellchat.disease.contact <- compute_multi_single_pathway_centrality(cellchat.disease.contact)
+cellchat.control.secreted <- compute_multi_single_pathway_centrality(cellchat.control.secreted)
+cellchat.disease.secreted <- compute_multi_single_pathway_centrality(cellchat.disease.secreted)
+
+celltype_cols <- c(
+  "eEVT" = "#E64B35",
+  "Endothelial" = "#4DBBD5",
+  "EVT" = "#00A087"
+)
+
+p_control_contact <- SpatialCellChat::spatialDimPlot(
+  cellchat.control.contact,
+  point.size = 1
+) +
+  ggtitle("Control") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_disease_contact <- SpatialCellChat::spatialDimPlot(
+  cellchat.disease.contact,
+  point.size = 1
+) +
+  ggtitle("Disease") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_control_secreted <- SpatialCellChat::spatialDimPlot(
+  cellchat.control.secreted,
+  point.size = 1
+) +
+  ggtitle("Control") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+p_disease_secreted <- SpatialCellChat::spatialDimPlot(
+  cellchat.disease.secreted,
+  point.size = 1
+) +
+  ggtitle("Disease") +
+  scale_color_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE) +
+  scale_fill_manual(values = celltype_cols, limits = names(celltype_cols), drop = FALSE)
+
+plot_multi_pathway_score <- function(p_spatial, chat, pathway.show, point.size = 1) {
+  pathway.available <- if ("pathways.cell" %in% names(chat@netP)) {
+    chat@netP$pathways.cell
+  } else {
+    chat@netP$pathways
+  }
+  
+  if (!pathway.show %in% pathway.available) {
+    message(pathway.show, " is not present in this CellChat object.")
+    return(NULL)
+  }
+  
+  g1 <- SpatialCellChat::spatialVisual_scoring(
+    chat,
+    signaling = pathway.show,
+    slot.name = "netP",
+    do.group = FALSE,
+    measure = c("outdeg"),
+    do.binary = FALSE,
+    color.heatmap = "Blues",
+    point.size = point.size
+  )
+  
+  g2 <- SpatialCellChat::spatialVisual_scoring(
+    chat,
+    signaling = pathway.show,
+    slot.name = "netP",
+    do.group = FALSE,
+    measure = c("indeg"),
+    do.binary = FALSE,
+    color.heatmap = "Reds",
+    point.size = point.size
+  )
+  
+  g3 <- SpatialCellChat::spatialVisual_scoring(
+    chat,
+    signaling = pathway.show,
+    slot.name = "netP",
+    do.group = FALSE,
+    merge = TRUE,
+    do.binary = FALSE,
+    color.heatmap = c("Blues", "Reds", "Purples"),
+    point.size = point.size
+  )
+  
+  patchwork::wrap_plots(p_spatial, g1, g2, g3, ncol = 4)
+}
+
+check_multi_pathways <- function(chat, pathways) {
+  pathway.available <- if ("pathways.cell" %in% names(chat@netP)) {
+    chat@netP$pathways.cell
+  } else {
+    chat@netP$pathways
+  }
+  
+  data.frame(
+    pathway = pathways,
+    present = pathways %in% pathway.available
+  )
+}
+```
+
+## NOTCH multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_contact, cellchat.control.contact, "NOTCH")
+plot_multi_pathway_score(p_disease_contact, cellchat.disease.contact, "NOTCH")
+```
+
+## NCAM multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_contact, cellchat.control.contact, "NCAM")
+plot_multi_pathway_score(p_disease_contact, cellchat.disease.contact, "NCAM")
+```
+
+## PD-L1 multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_contact, cellchat.control.contact, "PD-L1")
+plot_multi_pathway_score(p_disease_contact, cellchat.disease.contact, "PD-L1")
+```
+
+## TNF multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_secreted, cellchat.control.secreted, "TNF")
+plot_multi_pathway_score(p_disease_secreted, cellchat.disease.secreted, "TNF")
+```
+
+## IL1 multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_secreted, cellchat.control.secreted, "IL1")
+plot_multi_pathway_score(p_disease_secreted, cellchat.disease.secreted, "IL1")
+```
+
+## VEGF multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_secreted, cellchat.control.secreted, "VEGF")
+plot_multi_pathway_score(p_disease_secreted, cellchat.disease.secreted, "VEGF")
+```
+
+## LEP multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_secreted, cellchat.control.secreted, "LEP")
+plot_multi_pathway_score(p_disease_secreted, cellchat.disease.secreted, "LEP")
+```
+
+## IL2 multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_secreted, cellchat.control.secreted, "IL2")
+plot_multi_pathway_score(p_disease_secreted, cellchat.disease.secreted, "IL2")
+```
+
+## IL4 multi-sample pathway scores
+
+```{r, fig.width=16, fig.height=4}
+plot_multi_pathway_score(p_control_secreted, cellchat.control.secreted, "IL4")
+plot_multi_pathway_score(p_disease_secreted, cellchat.disease.secreted, "IL4")
 ```
 
