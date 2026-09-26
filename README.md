@@ -4,10 +4,10 @@ This repository contains the analysis workflow for a pilot Xenium spatial
 transcriptomics project investigating trophoblast-endothelial organization and
 cell-cell communication in severe preeclampsia (PE).
 
-The project began with one control sample for spatial neighborhood exploration,
-expanded to an initial control-disease comparison, and then moved to a
-six-donor dataset containing two controls and four PE samples. The final
-single-donor and multisample SpatialCellChat calculations were run as R scripts
+The project began with an initial comparison of one control and one disease
+sample, and then expanded to a six-donor dataset containing two controls and
+four PE samples. The final single-donor and multisample SpatialCellChat
+calculations were run as R scripts
 on the Myriad high-performance computing cluster. The R Markdown files contain
 the exploratory analyses, downstream comparisons, figures, and interpretation.
 
@@ -27,8 +27,8 @@ spiral arteries are converted into low-resistance vessels. Spatial
 transcriptomics makes it possible to examine both the physical organization of
 these cells and the signaling programs that may operate between them.
 
-The analysis used a targeted 479-gene Xenium panel. It first quantified nearest
-neighbors and intercellular distances in the control sample, then compared one
+The analysis used a targeted 479-gene Xenium panel. The initial analysis
+quantified nearest neighbors and intercellular distances while comparing one
 control donor (FVB) with one disease donor (FAM). Ligand-receptor analysis was
 explored with LIANA, including a nearest-neighbor-restricted version. Because
 that restriction did not produce sufficiently useful spatial results, the final
@@ -192,9 +192,9 @@ condition-level differences.
 
 This pilot project established an end-to-end workflow for spatial neighborhood
 analysis and ligand-receptor inference in Xenium data from the maternal-fetal
-interface. The work progressed from a single control sample to an initial
-control-disease comparison and finally to a six-donor SpatialCellChat analysis
-run on a high-performance computing cluster.
+interface. The work progressed from an initial one-control, one-disease
+comparison to a six-donor SpatialCellChat analysis run on a high-performance
+computing cluster.
 
 Across the exploratory analyses, NOTCH, NCAM, VEGF, and inflammatory signaling
 emerged as candidates for follow-up. The evidence remains preliminary, but it
