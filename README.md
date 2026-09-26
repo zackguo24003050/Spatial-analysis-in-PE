@@ -57,15 +57,8 @@ cohort planned for future study.
    whole tissue and k-nearest-neighbor-restricted subsets
                          |
                          v
-04 SpatialCellChat method development in FVB and FAM
-                         |
-                         v
-05 Myriad cluster calculations
-   six independent donor jobs and four condition-level jobs
-                         |
-                         v
-06 Donor-aware summaries, pooled condition comparisons,
-   pathway maps, and candidate ligand-receptor checks
+04 Donor and condition level comparison,
+   and candidate ligand-receptor checks
 ```
 
 ## Data and Analysis Design
