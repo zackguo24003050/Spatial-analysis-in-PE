@@ -70,16 +70,6 @@ cohort planned for future study.
 
 ## Data and Analysis Design
 
-The input is a Seurat object containing Xenium expression values, cell-type
-labels, donor labels, and cell-centroid coordinates. The cluster scripts expect
-the following assay and metadata fields:
-
-- `Xenium` assay
-- `donor`
-- `CellTypeManual.l2`
-- `centroid_X_1`
-- `centroid_X_2`
-
 Contact-dependent signaling uses a 20 micrometer contact range. Secreted
 signaling uses a 250 micrometer interaction range. Both workflows calculate
 cell-group pathway probabilities and individual-cell pathway probabilities.
@@ -87,8 +77,7 @@ The CellChat human database is supplemented with the candidate
 `CLEC11A-KIT` interaction described in the maternal-fetal interface literature
 [2].
 
-Large Xenium objects and generated CellChat RDS files are not stored in this
-repository.
+The original data are not intended to be shown before formal result is published.
 
 ## Analysis Workflow and Preliminary Results
 
@@ -100,7 +89,7 @@ directional conditional normalization, intercellular distances, and COZI
 scores. It also examines how neighborhood composition changes as the number of
 neighbors increases.
 
-**Preliminary result:** the initial FVB-FAM comparison showed fewer eEVTs in the
+**Result:** the initial FVB-FAM comparison showed fewer eEVTs in the
 disease sample and suggested a larger eEVT-to-endothelial distance in disease,
 particularly in decidual regions. COZI also suggested differences in eEVT-eEVT
 and endothelial-endothelial organization. These observations came from one
@@ -114,7 +103,7 @@ runs the main LIANA workflow. The extended
 [`Ligand-Receptor Exploration organized eEVT Endothelial.Rmd`](Ligand-Receptor%20Exploration%20organized%20eEVT%20Endothelial.Rmd)
 adds eEVT-endothelial-focused and nearest-neighbor-restricted analyses.
 
-**Preliminary result:** LIANA prioritized NOTCH- and LEP-related candidates in
+**Result:** LIANA prioritized NOTCH- and LEP-related candidates in
 the initial control-disease comparison. Restricting the expression data to very
 small spatial neighborhoods did not yield sufficiently stable or interpretable
 results, so this branch was retained as method exploration rather than the
@@ -166,7 +155,7 @@ performs the downstream control-disease comparison. It includes donor-averaged
 interaction-count summaries from the six independent objects as well as pooled
 condition-level comparisons.
 
-**Preliminary result:** the six-donor analysis prioritized NOTCH, NCAM, and VEGF
+**Result:** the six-donor analysis prioritized NOTCH, NCAM, and VEGF
 as control-associated candidate programs, while the disease condition showed
 stronger inflammatory signaling candidates, including TNF-, IL1-, IL2-, and
 IL4-related pathways. Individual-cell pathway maps were used to examine whether
@@ -310,9 +299,6 @@ The analysis is written in R. Packages used across the workflows include:
 - Matrix, dplyr, tidyr, and tibble
 - ggplot2, patchwork, and ComplexHeatmap
 - future
-
-Package versions and compute resources may affect reproducibility, particularly
-for SpatialCellChat permutation and individual-cell pathway calculations.
 
 ## References
 
