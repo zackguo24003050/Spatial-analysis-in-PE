@@ -98,10 +98,9 @@ statistical evidence.
 
 ### 02. Exploratory LIANA analysis
 
-[`Ligand-Receptor Exploration organized.Rmd`](Ligand-Receptor%20Exploration%20organized.Rmd)
-runs the main LIANA workflow. The extended
 [`Ligand-Receptor Exploration organized eEVT Endothelial.Rmd`](Ligand-Receptor%20Exploration%20organized%20eEVT%20Endothelial.Rmd)
-adds eEVT-endothelial-focused and nearest-neighbor-restricted analyses.
+contains the LIANA workflow, including eEVT-endothelial-focused and
+nearest-neighbor-restricted analyses.
 
 **Result:** LIANA prioritized NOTCH- and LEP-related candidates in
 the initial control-disease comparison. Restricting the expression data to very
@@ -111,15 +110,10 @@ final communication analysis.
 
 ### 03. Initial SpatialCellChat analysis
 
-[`SpatialCellchat.Rmd`](SpatialCellchat.Rmd) develops the spatial communication
-workflow in the original FVB-FAM comparison. It separates cell-cell contact
-interactions from secreted signaling and calculates ligand-receptor and pathway
-probabilities using Xenium expression and cell coordinates.
-
-[`Comparison by Cellchat.Rmd`](Comparison%20by%20Cellchat.Rmd) compares the
-resulting control and disease objects. A rendered version is available as
-[`Comparison-by-Cellchat.html`](Comparison-by-Cellchat.html); download the HTML
-file and open it locally for the best viewing experience.
+The initial FVB-FAM analysis established the SpatialCellChat workflow. It
+separated cell-cell contact interactions from secreted signaling and calculated
+ligand-receptor and pathway probabilities using Xenium expression and cell
+coordinates.
 
 **Preliminary result:** the initial pair suggested relatively stronger NOTCH
 and CDH5-associated communication in the control sample and relatively stronger
@@ -128,32 +122,20 @@ method development and motivated expansion to all six donors.
 
 ### 04. Six-donor single-sample calculation
 
-The final per-donor calculation was performed on the Myriad cluster with
+The per-donor calculation was performed on the Myriad cluster with
 [`SpatialCellChat_single_sample_compute_myriad.R`](SpatialCellChat_single_sample_compute_myriad.R).
-Each job selects one donor using `DONOR_ID`, then computes both contact and
-secreted signaling. Running all six donors generates 12 final CellChat RDS
-objects.
-
-[`SpatialCellChat by sample-6.Rmd`](SpatialCellChat%20by%20sample-6.Rmd) loads
-these calculated objects for donor-level pathway summaries, communication
-heatmaps, hotspot visualization, and individual-cell pathway maps. The heavy
-calculation in the final workflow came from the cluster script rather than from
-knitting this notebook locally.
+The resulting independent donor objects supported donor-level pathway
+summaries, communication heatmaps, hotspot visualization, and individual-cell
+pathway maps.
 
 ### 05. Multisample condition calculation
 
-The final condition-level calculation was performed on Myriad with
+The condition-level calculation was performed on Myriad with
 [`SpatialCellChat_multisample_compute_myriad.R`](SpatialCellChat_multisample_compute_myriad.R).
 The script groups FVB and FVQ as control and FAM, FCM, FEP, and FVS as disease.
-One job processes one condition and one signaling class, so four jobs generate
-the complete contact and secreted result set.
-
-[`SpatialCellChat multiple sample.Rmd`](SpatialCellChat%20multiple%20sample.Rmd)
-documents the multisample workflow and visualizes individual-cell pathway
-scores. [`Comparison-by-Cellchat-multiple-sample.Rmd`](Comparison-by-Cellchat-multiple-sample.Rmd)
-performs the downstream control-disease comparison. It includes donor-averaged
-interaction-count summaries from the six independent objects as well as pooled
-condition-level comparisons.
+[`Comparison-by-Cellchat-multiple-sample.Rmd`](Comparison-by-Cellchat-multiple-sample.Rmd)
+contains the downstream control-disease comparison, including donor-averaged
+interaction-count summaries and pooled condition-level comparisons.
 
 **Result:** the six-donor analysis prioritized NOTCH, NCAM, and VEGF
 as control-associated candidate programs, while the disease condition showed
@@ -211,16 +193,10 @@ the group's planned expanded study.
 ```text
 .
 +-- Neigbour_analysis_exploration.Rmd
-+-- Ligand-Receptor Exploration organized.Rmd
 +-- Ligand-Receptor Exploration organized eEVT Endothelial.Rmd
-+-- SpatialCellchat.Rmd
-+-- Comparison by Cellchat.Rmd
-+-- SpatialCellChat by sample-6.Rmd
-+-- SpatialCellChat multiple sample.Rmd
 +-- Comparison-by-Cellchat-multiple-sample.Rmd
 +-- SpatialCellChat_single_sample_compute_myriad.R
 +-- SpatialCellChat_multisample_compute_myriad.R
-+-- Comparison-by-Cellchat.html
 +-- README.md
 ```
 
@@ -229,15 +205,10 @@ the group's planned expanded study.
 | Stage | File | Purpose |
 |---:|---|---|
 | 01 | [Neigbour_analysis_exploration.Rmd](Neigbour_analysis_exploration.Rmd) | Nearest-neighbor composition, distance, k sensitivity, and COZI exploration |
-| 02 | [Ligand-Receptor Exploration organized.Rmd](Ligand-Receptor%20Exploration%20organized.Rmd) | Main LIANA ligand-receptor workflow |
-| 02b | [Ligand-Receptor Exploration organized eEVT Endothelial.Rmd](Ligand-Receptor%20Exploration%20organized%20eEVT%20Endothelial.Rmd) | Extended eEVT-endothelial and k-nearest-neighbor LIANA exploration |
-| 03 | [SpatialCellchat.Rmd](SpatialCellchat.Rmd) | Initial FVB-FAM SpatialCellChat workflow |
-| 04 | [Comparison by Cellchat.Rmd](Comparison%20by%20Cellchat.Rmd) | Initial FVB-FAM CellChat comparison |
-| 05 | [SpatialCellChat_single_sample_compute_myriad.R](SpatialCellChat_single_sample_compute_myriad.R) | Final cluster calculation for each donor independently |
-| 06 | [SpatialCellChat by sample-6.Rmd](SpatialCellChat%20by%20sample-6.Rmd) | Postprocessing and visualization of six independent donor objects |
-| 07 | [SpatialCellChat_multisample_compute_myriad.R](SpatialCellChat_multisample_compute_myriad.R) | Final cluster calculation for pooled control and disease objects |
-| 08 | [SpatialCellChat multiple sample.Rmd](SpatialCellChat%20multiple%20sample.Rmd) | Multisample pathway visualization and exploratory workflow |
-| 09 | [Comparison-by-Cellchat-multiple-sample.Rmd](Comparison-by-Cellchat-multiple-sample.Rmd) | Donor-aware summaries and pooled control-disease network comparisons |
+| 02 | [Ligand-Receptor Exploration organized eEVT Endothelial.Rmd](Ligand-Receptor%20Exploration%20organized%20eEVT%20Endothelial.Rmd) | eEVT-endothelial LIANA workflow and k-nearest-neighbor-restricted exploration |
+| 03 | [SpatialCellChat_single_sample_compute_myriad.R](SpatialCellChat_single_sample_compute_myriad.R) | SpatialCellChat calculation for each donor independently |
+| 04 | [SpatialCellChat_multisample_compute_myriad.R](SpatialCellChat_multisample_compute_myriad.R) | SpatialCellChat calculation for pooled control and disease objects |
+| 05 | [Comparison-by-Cellchat-multiple-sample.Rmd](Comparison-by-Cellchat-multiple-sample.Rmd) | Donor-aware summaries and pooled control-disease network comparisons |
 
 ## Software
 
@@ -268,10 +239,3 @@ The analysis is written in R. Packages used across the workflows include:
    *Comparison and optimization of cellular neighbor preference methods for
    quantitative tissue analysis.* Nature Communications. 2026;17.
    [doi:10.1038/s41467-026-71699-z](https://doi.org/10.1038/s41467-026-71699-z)
-
-## Notes
-
-The R Markdown notebooks preserve local Windows paths used during the original
-analysis. Update these paths before running the notebooks on another computer.
-The two Myriad compute scripts use environment variables and are the portable,
-command-line entry points for the final six-donor and multisample calculations.
