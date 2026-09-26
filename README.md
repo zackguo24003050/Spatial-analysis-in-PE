@@ -91,7 +91,7 @@ statistical evidence.
 
 ### 02. Exploratory LIANA analysis
 
-[`Ligand-Receptor Exploration organized eEVT Endothelial.Rmd`](Ligand-Receptor%20Exploration%20organized%20eEVT%20Endothelial.Rmd)
+[`Ligand-Receptor Exploration organized.Rmd`](Ligand-Receptor%20Exploration%20organized.Rmd)
 contains the LIANA workflow, including eEVT-endothelial-focused and
 nearest-neighbor-restricted analyses.
 
@@ -186,7 +186,7 @@ the group's planned expanded study.
 ```text
 .
 +-- Neigbour_analysis_exploration.Rmd
-+-- Ligand-Receptor Exploration organized eEVT Endothelial.Rmd
++-- Ligand-Receptor Exploration organized.Rmd
 +-- Comparison-by-Cellchat-multiple-sample.Rmd
 +-- SpatialCellChat_single_sample_compute_myriad.R
 +-- SpatialCellChat_multisample_compute_myriad.R
@@ -198,7 +198,7 @@ the group's planned expanded study.
 | Stage | File | Purpose |
 |---:|---|---|
 | 01 | [Neigbour_analysis_exploration.Rmd](Neigbour_analysis_exploration.Rmd) | Nearest-neighbor composition, distance, k sensitivity, and COZI exploration |
-| 02 | [Ligand-Receptor Exploration organized eEVT Endothelial.Rmd](Ligand-Receptor%20Exploration%20organized%20eEVT%20Endothelial.Rmd) | eEVT-endothelial LIANA workflow and k-nearest-neighbor-restricted exploration |
+| 02 | [Ligand-Receptor Exploration organized.Rmd](Ligand-Receptor%20Exploration%20organized.Rmd) | eEVT-endothelial LIANA workflow and k-nearest-neighbor-restricted exploration |
 | 03 | [SpatialCellChat_single_sample_compute_myriad.R](SpatialCellChat_single_sample_compute_myriad.R) | SpatialCellChat calculation for each donor independently |
 | 04 | [SpatialCellChat_multisample_compute_myriad.R](SpatialCellChat_multisample_compute_myriad.R) | SpatialCellChat calculation for pooled control and disease objects |
 | 05 | [Comparison-by-Cellchat-multiple-sample.Rmd](Comparison-by-Cellchat-multiple-sample.Rmd) | Donor-aware summaries and pooled control-disease network comparisons |
