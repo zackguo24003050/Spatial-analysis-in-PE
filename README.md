@@ -206,55 +206,6 @@ the group's planned expanded study.
   and independent biological validation are required before drawing firm
   disease-mechanism conclusions.
 
-## Running the Myriad Compute Scripts
-
-### Single donor
-
-Run one job for each of `FVB`, `FVQ`, `FAM`, `FCM`, `FEP`, and `FVS`:
-
-```bash
-PROJECT_DIR=/path/to/project \
-DONOR_ID=FVB \
-Rscript SpatialCellChat_single_sample_compute_myriad.R
-```
-
-The default outputs are:
-
-```text
-Output/Data/single_sample_cellchat/chat_FVB_contactRange20_final.rds
-Output/Data/single_sample_cellchat/chat_FVB_secreted_range250_final.rds
-```
-
-### Multisample condition
-
-Run the script for each condition and signaling-class combination:
-
-```bash
-PROJECT_DIR=/path/to/project \
-CONDITION_ID=control \
-SIGNALING_TYPE=contact \
-Rscript SpatialCellChat_multisample_compute_myriad.R
-```
-
-Required combinations:
-
-```text
-CONDITION_ID=control  SIGNALING_TYPE=contact
-CONDITION_ID=control  SIGNALING_TYPE=secreted
-CONDITION_ID=disease  SIGNALING_TYPE=contact
-CONDITION_ID=disease  SIGNALING_TYPE=secreted
-```
-
-The default multisample outputs are written to:
-
-```text
-Output/Data/multi_sample_cellchat_scale5/
-```
-
-Set `INPUT_RDS` or `OUTPUT_DATA_DIR` to override the default input and output
-locations. The scripts validate required metadata, donor names, and final
-individual-cell pathway slots before saving each RDS atomically.
-
 ## Repository Structure
 
 ```text
