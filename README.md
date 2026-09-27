@@ -9,7 +9,8 @@ sample, and then expanded to a six-donor dataset containing two controls and
 four PE samples. The final single-donor and multisample SpatialCellChat
 calculations were run as R scripts
 on the Myriad computing cluster. The R Markdown files contain
-detailed script and interpretation.
+detailed script and interpretation. Major results are shown below in 
+"Analysis Workflow and Preliminary Results".
 
 **Supervisor:** Yara Elana Sanchez Corrales<br>
 **Principal investigator:** Sergi Castellano Hereza<br>
@@ -87,8 +88,7 @@ each query cell type to each neighbor cell type, then divided by all neighbor
 pairs from that query type in the same region. For example, the endothelial to
 eEVT percentage is the number of endothelial cells whose nearest neighbor is
 an eEVT divided by the number of endothelial query cells when *n* = 1. The
-heatmaps below use *n* = 1; each row sums to 100%. The notebook also explores
-larger neighborhoods and nearest-neighbor distances.
+heatmaps below use *n* = 1; each row sums to 100%. 
 
 ![Nearest-neighbor cell-type proportions for FVB and FAM, shown separately for decidua and muscle](figures/nearest-neighbor-proportions.png)
 
