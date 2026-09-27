@@ -77,17 +77,42 @@ The original data are not intended to be shown before formal result is published
 ### 01. Spatial neighborhood exploration
 
 [`Neigbour_analysis_exploration.Rmd`](Neigbour_analysis_exploration.Rmd)
-uses nearest-neighbor searches to describe cell-type neighborhood composition,
-directional conditional normalization, intercellular distances, and COZI
-scores. It also examines how neighborhood composition changes as the number of
-neighbors increases.
+compares endothelial extravillous trophoblasts (eEVTs) and maternal endothelial
+cells in one control donor (FVB) and one PE donor (FAM).
 
-**Result:** the initial FVB-FAM comparison showed fewer eEVTs in the
-disease sample and suggested a larger eEVT-to-endothelial distance in disease,
-particularly in decidual regions. COZI also suggested differences in eEVT-eEVT
-and endothelial-endothelial organization. These observations came from one
-donor per condition and are therefore descriptive rather than cohort-level
-statistical evidence.
+**Nearest-neighbor proportions (NEP).** Within each donor and tissue region
+(decidua or muscle), I used cell-centroid coordinates to find the *n* nearest
+other cells for every eEVT and endothelial cell. I counted directed pairs from
+each query cell type to each neighbor cell type, then divided by all neighbor
+pairs from that query type in the same region. For example, the endothelial to
+eEVT percentage is the number of endothelial cells whose nearest neighbor is
+an eEVT divided by the number of endothelial query cells when *n* = 1. The
+heatmaps below use *n* = 1; each row sums to 100%. The notebook also explores
+larger neighborhoods and nearest-neighbor distances.
+
+![Nearest-neighbor cell-type proportions for FVB and FAM, shown separately for decidua and muscle](figures/nearest-neighbor-proportions.png)
+
+*Rows show the query cell type and columns show the neighbor cell type. In the
+decidua, 6.7% of endothelial cells in FVB had an eEVT as their nearest neighbor,
+compared with 0.4% in FAM. These proportions describe the observed neighborhood
+composition and depend on how many eEVTs are present.*
+
+**COZI.** I also ran conditional neighborhood preference analysis separately
+for FVB and FAM using each cell's three nearest neighbors and 300 label
+permutations. This calculation uses each donor as a whole rather than separating
+decidua and muscle. In the dot plots, dot size is the conditional cell ratio (the
+fraction of source cells with at least one neighbor of the indicated type).
+Color is the z-score for the conditional neighbor count relative to the
+permuted cell labels: positive values indicate a higher value than expected
+under that null model, and negative values indicate a lower value.
+
+![COZI conditional cell ratios and permutation z-scores for FVB and FAM](figures/cozi-scores.png)
+
+*The initial pair suggests a weaker permutation-standardized eEVT self-neighbor
+signal in FAM.
+Because this comparison includes only one donor per condition, the figure does
+not establish a reproducible PE effect. The marked difference in eEVT abundance
+also complicates interpretation of endothelial to eEVT proportions.*
 
 ### 02. Exploratory LIANA analysis
 
@@ -184,6 +209,9 @@ the group's planned expanded study.
 +-- Comparison-by-Cellchat-multiple-sample.Rmd
 +-- SpatialCellChat_single_sample_compute_myriad.R
 +-- SpatialCellChat_multisample_compute_myriad.R
++-- figures/
+|   +-- nearest-neighbor-proportions.png
+|   +-- cozi-scores.png
 +-- README.md
 ```
 
