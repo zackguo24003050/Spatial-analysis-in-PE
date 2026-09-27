@@ -53,26 +53,23 @@ a working analysis framework and prioritize candidate pathways for a larger
 cohort planned for future study.
 
 ```text
-01 Xenium spatial data and cell-type annotations
+01 Nearest-neighbor preference and distance analysis
                          |
                          v
-02 Nearest-neighbor preference and distance analysis
-                         |
-                         v
-03 Exploratory LIANA ligand-receptor analysis
+02 Exploratory LIANA ligand-receptor analysis
    whole tissue and k-nearest-neighbor-restricted subsets
                          |
                          v
-04 Initial FVB-FAM SpatialCellChat comparison
+03 Initial FVB-FAM SpatialCellChat comparison
                          |
                          v
-05 Six-donor pooled comparison
+04 Six-donor pooled comparison
                          |
                          v
-06 Independent donor and individual-cell pathway follow-up
+05 Independent donor and individual-cell pathway follow-up
                          |
                          v
-07 Cell-identity and candidate-gene checks
+06 Cell-identity and candidate-gene checks
 ```
 
 ## Data and Analysis Design
