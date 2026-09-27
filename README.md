@@ -58,7 +58,10 @@ cohort planned for future study.
    whole tissue and k-nearest-neighbor-restricted subsets
                          |
                          v
-04 Donor and condition level comparison,
+04 Exploratory SpatialCellchat ligand-receptor analysis
+                         |
+                         v
+05 Condition and Dondition level comparison with SpatialCellchat,
    and candidate ligand-receptor checks
 ```
 
