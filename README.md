@@ -82,7 +82,7 @@ interaction range used for secreted signaling.
 
 ![SpatialCellChat contact and interaction ranges](figures/spatialcellchat-ranges.png)
 
-*SpatialCellChat uses a 20 µm contact range for contact-dependent interactions
+*Figure legend. SpatialCellChat uses a 20 µm contact range for contact-dependent interactions
 and a 250 µm interaction range for secreted signaling. The plots show the
 distance distributions considered in each setting.*
 
@@ -100,80 +100,96 @@ The original data are not intended to be shown before formal result is published
 compares endothelial extravillous trophoblasts (eEVTs) and maternal endothelial
 cells in one control donor (FVB) and one PE donor (FAM).
 
-**Nearest-neighbor preference (NEP).** Within each donor and tissue region
-(decidua or muscle), I used cell-centroid coordinates to find the *n* nearest
-other cells for every eEVT and endothelial cell. I counted directed pairs from
-each query cell type to each neighbor cell type, then divided by all neighbor
+#### Nearest-neighbor preference (NEP)
+
+**What we did.** Within each donor and tissue region (decidua or muscle), I used
+cell-centroid coordinates to find the *n* nearest other cells for every eEVT and
+endothelial cell. I counted directed pairs from each query cell type to each
+neighbor cell type, then divided by all neighbor
 pairs from that query type in the same region. For example, the endothelial to
 eEVT percentage is the number of endothelial cells whose nearest neighbor is
 an eEVT divided by the number of endothelial query cells when *n* = 1. The
-heatmaps below use *n* = 1; each row sums to 100%. 
+heatmaps below use *n* = 1; each row sums to 100%.
+
+**Result.** In the decidua, 6.7% of endothelial cells in FVB had an eEVT as
+their nearest neighbor, compared with 0.4% in FAM. This is an observed
+neighborhood proportion, which also depends on eEVT abundance.
 
 ![Nearest-neighbor cell-type proportions for FVB and FAM, shown separately for decidua and muscle](figures/nearest-neighbor-proportions.png)
 
-*Rows show the query cell type and columns show the neighbor cell type. In the
-decidua, 6.7% of endothelial cells in FVB had an eEVT as their nearest neighbor,
-compared with 0.4% in FAM. These proportions describe the observed neighborhood
-composition and depend on how many eEVTs are present.*
+*Figure legend. Nearest-neighbor proportions in FVB (control) and FAM (PE),
+split by decidua and muscle. Rows are query cell types; columns are neighbor
+cell types; each row totals 100%.*
 
-**COZI.** I also ran conditional neighborhood preference analysis separately
-for FVB and FAM using each cell's three nearest neighbors and 300 label
+#### COZI
+
+**What we did.** I also ran conditional neighborhood preference analysis
+separately for FVB and FAM using each cell's three nearest neighbors and 300 label
 permutations. This calculation uses each donor as a whole rather than separating
-decidua and muscle. In the dot plots, dot size is the conditional cell ratio (the
-fraction of source cells with at least one neighbor of the indicated type).
-Color is the z-score for the conditional neighbor count relative to the
-permuted cell labels: positive values indicate a higher value than expected
-under that null model, and negative values indicate a lower value.
+decidua and muscle.
+
+**Result.** The initial pair suggests a weaker permutation-standardized eEVT
+self-neighbor signal in FAM. With only one donor per condition, this does not
+establish a reproducible PE effect. The difference in eEVT abundance also
+complicates interpretation of endothelial-to-eEVT proportions.
 
 ![COZI conditional cell ratios and permutation z-scores for FVB and FAM](figures/cozi-scores.png)
 
-*The initial pair suggests a weaker permutation-standardized eEVT self-neighbor
-signal in FAM.
-Because this comparison includes only one donor per condition, the figure does
-not establish a reproducible PE effect. The marked difference in eEVT abundance
-also complicates interpretation of endothelial to eEVT proportions.*
+*Figure legend. COZI for FVB and FAM using three nearest neighbors. Dot size is
+the fraction of source cells with at least one indicated neighbor; color is the
+neighbor-count z-score relative to 300 label permutations (red, higher than
+expected; blue, lower).*
 
 ### 02. Exploratory LIANA analysis
 
+**What we did.**
 [`Ligand-Receptor Exploration organized.Rmd`](Ligand-Receptor%20Exploration%20organized.Rmd)
-compares the FVB and FAM ligand-receptor results, including the eEVT to
-endothelial direction. Few ligand-receptor pairs met the selected LIANA
-significance threshold. Among the selected pairs, the expression-support plot
-shows lower LEP–LEPR and JAG1–NOTCH1 scores in FAM, while SPP1–CD44 and
-FN1–CD44 score higher. These bars summarize ligand and receptor expression;
-they are not a spatial interaction test.
+compares FVB and FAM ligand-receptor results, including the eEVT-to-endothelial
+direction. Because the original LIANA inference did not use cell coordinates,
+I repeated it on cells with a nearby cell of the opposite type as an exploratory
+contact-focused restriction.
+
+**Result.** Few ligand-receptor pairs met the selected LIANA significance
+threshold. Among selected pairs, expression-support scores for LEP–LEPR and
+JAG1–NOTCH1 were lower in FAM, while SPP1–CD44 and FN1–CD44 were higher.
+Restricting to nearby opposite-type cells changed little, so this branch did
+not become the main communication analysis. The bars summarize ligand and
+receptor expression, not a spatial interaction test.
 
 ![Selected eEVT-to-endothelial ligand-receptor expression scores in the original FVB-FAM comparison and the k3 subset](figures/liana-selected-lr-expression.png)
 
-*The left panel uses all annotated eEVT and endothelial cells in each donor.
-The right panel shows JAG1–NOTCH1 after restricting to cells with an opposite
-cell type among their three nearest neighbors. The direction of this candidate
-change remains similar.*
-
-The original LIANA inference did not use cell coordinates. I therefore repeated
-the analysis on cells with a nearby cell of the opposite type as an exploratory
-contact-focused restriction. The overall findings changed little, so this
-branch did not become the main communication analysis.
+*Figure legend. Selected eEVT-to-endothelial LR expression-support scores in
+FVB (control) and FAM (PE). Left: all annotated cells. Right: JAG1–NOTCH1 after
+requiring an opposite-type cell among the three nearest neighbors.*
 
 ### 03. Initial SpatialCellChat analysis
 
-The initial SpatialCellChat comparison used one control (FVB) and one PE donor
-(FAM). At this stage, the analyzed cell labels were **eEVT and Endothelial**;
+**What we did.** The initial SpatialCellChat comparison used one control (FVB)
+and one PE donor (FAM). At this stage, the analyzed cell labels were **eEVT and Endothelial**;
 EVT was added in the later six-donor analysis. SpatialCellChat used Xenium
 expression and coordinates to infer contact-dependent and secreted signaling
 separately.
 
+**Result.** This initial pair suggested stronger contact-associated NOTCH and
+CDH5 signaling in FVB and stronger inflammatory secreted programs in FAM.
+These are one-donor-per-condition observations.
+
 ![Contact and secreted pathway rankings in the initial FVB-FAM SpatialCellChat comparison](figures/initial-cellchat-ranknet.png)
+
+*Figure legend. Initial FVB–FAM pathway rankings. Left half:
+contact-dependent signaling; right half: secreted signaling. Within each half,
+relative information flow is plotted beside information flow.*
 
 ![Cell-type signaling patterns for contact and secreted pathways in the initial FVB-FAM comparison](figures/initial-cellchat-patterns.png)
 
-*The initial pair suggested stronger contact-associated NOTCH and CDH5
-signaling in FVB and stronger inflammatory secreted programs in FAM. These
-figures summarize one donor per condition.*
+*Figure legend. Initial FVB–FAM cell-type signaling patterns. Left:
+contact-dependent pathways; right: secreted pathways. Rows are pathways and
+columns are eEVT or Endothelial cell groups in each condition.*
 
 ### 04. Six-donor condition comparison
 
-The formal six-donor analysis added **EVT** alongside eEVT and Endothelial.
+**What we did.** The formal six-donor analysis added **EVT** alongside eEVT and
+Endothelial.
 The condition-level calculation was performed on Myriad with
 [`SpatialCellChat_multisample_compute_myriad.R`](SpatialCellChat_multisample_compute_myriad.R).
 The script groups FVB and FVQ as control and FAM, FCM, FEP, and FVS as disease.
@@ -181,25 +197,39 @@ The script groups FVB and FVQ as control and FAM, FCM, FEP, and FVS as disease.
 contains the downstream control-disease comparison, including donor-averaged
 interaction-count summaries and pooled condition-level comparisons.
 
+**Result.** The pooled condition networks prioritize NOTCH and NCAM in control,
+along with VEGF-associated secreted signaling. Disease shows stronger candidate
+inflammatory programs, including TNF and interleukin pathways. These pooled
+network differences are for pathway prioritization, not independent donor-level
+statistical tests.
+
 ![Contact and secreted pathway rankings from pooled six-donor condition objects](figures/six-donor-cellchat-ranknet.png)
+
+*Figure legend. Six-donor pooled pathway rankings. Left half:
+contact-dependent signaling; right half: secreted signaling. Within each half,
+relative information flow is plotted beside information flow for control
+(two donors) and disease (four donors).*
 
 ![Contact and secreted cell-type signaling patterns from pooled six-donor condition objects](figures/six-donor-cellchat-patterns.png)
 
-*These pooled comparisons prioritize NOTCH and NCAM in control, along with
-VEGF-associated secreted signaling. Disease shows stronger candidate
-inflammatory programs, including TNF and interleukin pathways. The plots
-compare condition-level networks, not independent donor estimates.*
+*Figure legend. Six-donor pooled cell-type signaling patterns. Left:
+contact-dependent pathways; right: secreted pathways. Rows are pathways and
+columns are eEVT, Endothelial, or EVT cell groups in each condition.*
 
 ### 05. Independent donors and individual-cell pathway maps
 
-I next examined independently inferred donor objects from
+**What we did.** I examined independently inferred donor objects from
 [`SpatialCellChat_single_sample_compute_myriad.R`](SpatialCellChat_single_sample_compute_myriad.R)
 to check how candidate pathways varied between samples. After this donor-level
 review, I mapped selected pathway scores for **individual cells**. This returns
 the inferred signal to its location in the tissue instead of ending at a
 cell-type average. NCAM provides an example across all six independent donors.
-Each map shows cell identity and location on the left, followed by outgoing,
-incoming, and merged inferred NCAM scores for individual cells.
+
+**Result.** In the two controls, NCAM-scored cells appear more concentrated
+around regions rich in eEVT and some EVT. In disease, they appear more dispersed
+across the tissue rather than forming the same localized pattern. This is a
+visual, donor-level observation: tissue shapes and score color scales differ
+between donors, and the maps do not directly measure ligand-receptor binding.
 
 #### Control donors
 
@@ -207,9 +237,15 @@ incoming, and merged inferred NCAM scores for individual cells.
 |:---|
 | <img src="figures/fvb-ncam-cell-map.png" alt="FVB cell identities and individual-cell NCAM pathway scores" border="1"> |
 
+*Figure legend. FVB (control): cell identities and individual-cell outgoing,
+incoming, and merged NCAM pathway scores, left to right.*
+
 | FVQ |
 |:---|
 | <img src="figures/fvq-ncam-cell-map.png" alt="FVQ cell identities and individual-cell NCAM pathway scores" border="1"> |
+
+*Figure legend. FVQ (control): cell identities and individual-cell outgoing,
+incoming, and merged NCAM pathway scores, left to right.*
 
 ---
 
@@ -219,44 +255,55 @@ incoming, and merged inferred NCAM scores for individual cells.
 |:---|
 | <img src="figures/fam-ncam-cell-map.png" alt="FAM cell identities and individual-cell NCAM pathway scores" border="1"> |
 
+*Figure legend. FAM (PE): cell identities and individual-cell outgoing,
+incoming, and merged NCAM pathway scores, left to right.*
+
 | FCM |
 |:---|
 | <img src="figures/fcm-ncam-cell-map.png" alt="FCM cell identities and individual-cell NCAM pathway scores" border="1"> |
+
+*Figure legend. FCM (PE): cell identities and individual-cell outgoing,
+incoming, and merged NCAM pathway scores, left to right.*
 
 | FEP |
 |:---|
 | <img src="figures/fep-ncam-cell-map.png" alt="FEP cell identities and individual-cell NCAM pathway scores" border="1"> |
 
+*Figure legend. FEP (PE): cell identities and individual-cell outgoing,
+incoming, and merged NCAM pathway scores, left to right.*
+
 | FVS |
 |:---|
 | <img src="figures/fvs-ncam-cell-map.png" alt="FVS cell identities and individual-cell NCAM pathway scores" border="1"> |
 
-*In the two controls, NCAM-scored cells appear more concentrated around regions
-rich in eEVT and some EVT. In disease, they appear more dispersed across
-the tissue rather than forming the same localized pattern. This is a visual,
-donor-level observation: tissue shapes and score color scales differ between
-donors, and the maps do not directly measure ligand-receptor binding.*
+*Figure legend. FVS (PE): cell identities and individual-cell outgoing,
+incoming, and merged NCAM pathway scores, left to right.*
 
 ### 06. Six-donor quality checks
 
-The first figure checks the identities assigned after Xenium cell segmentation
-and annotation. Marker expression for eEVT, Endothelial, and EVT is shown for
-the pooled control donors (FVB and FVQ) and disease donors (FAM, FCM, FEP, and
-FVS). The patterns are broadly consistent with the assigned cell types, with
-no obvious identity mismatch. This is an annotation sanity check, not a direct
-assessment of segmentation boundaries.
+**What we did.** I checked identities assigned after Xenium cell segmentation
+and annotation using marker expression for eEVT, Endothelial, and EVT. I also
+checked selected genes behind candidate contact and secreted ligand-receptor
+pathways. Both checks use pooled control cells from FVB and FVQ and pooled PE
+cells from FAM, FCM, FEP, and FVS.
+
+**Result.** Marker patterns are broadly consistent with the assigned cell
+types, with no obvious identity mismatch. The selected LR genes are detected in
+the expected cell-type compartments. These checks support interpretation of
+the inferred pathways but do not directly validate segmentation boundaries,
+establish physical communication, or provide donor-level significance.
 
 ![Six-donor cell-identity check, with pooled control and disease panels](figures/cell-identity-check.png)
 
-The second figure checks selected genes behind the candidate contact and
-secreted ligand-receptor pathways in those same six donors. Dot size represents
-the proportion of cells expressing each gene, and color represents scaled
-average expression. The relevant genes are detected in the expected cell-type
-compartments. This supports interpretation of the inferred pathways but does
-not independently establish physical communication or donor-level
-significance.
+*Figure legend. Cell-identity marker expression in pooled control (left) and
+PE (right) cells, grouped as eEVT, Endothelial, and EVT. Dot size is the
+expressing-cell fraction; color is scaled average expression.*
 
 ![Six-donor key ligand-receptor gene check, with pooled control and disease panels](figures/key-lr-check.png)
+
+*Figure legend. Selected contact-dependent and secreted LR-gene expression in
+pooled control (left) and PE (right) cells. Dot size is the expressing-cell
+fraction; color is scaled average expression.*
 
 ## Interpretation of the Multisample Comparison
 
