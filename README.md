@@ -209,15 +209,12 @@ outgoing, incoming, and merged inferred NCAM scores for individual cells. These
 maps help locate candidate signaling within a donor and do not directly measure
 ligand-receptor binding.*
 
-### 06. Cell identity and candidate-gene checks
+### 06. Quality and candidate-gene checks
 
-Before interpreting pathway differences, I checked whether eEVT, Endothelial,
-and EVT labels were supported by marker expression in the pooled control and
-disease cells. The panels include immune and chemokine genes alongside lineage
-markers such as HLA-G, KRT7, and PECAM1. Dot size shows the fraction of cells
-expressing each gene; color shows scaled average expression.
-
-![Control and disease cell-identity marker checks for eEVT, Endothelial and EVT](figures/cell-identity-check.png)
+Before interpreting pathway differences, I checked eEVT, Endothelial, and EVT
+annotations against marker expression in the six-donor Xenium object. The
+check is documented in the analysis notebook; only the key LR gene checks are
+shown here.
 
 For the final six-donor analysis, I also checked selected ligand and receptor
 genes behind the candidate contact and secreted pathways. The control panel
@@ -290,7 +287,6 @@ the group's planned expanded study.
 |   +-- six-donor-cellchat-ranknet.png
 |   +-- six-donor-cellchat-patterns.png
 |   +-- fvb-ncam-cell-map.png
-|   +-- cell-identity-check.png
 |   +-- key-lr-control.png
 |   +-- key-lr-disease.png
 +-- README.md
