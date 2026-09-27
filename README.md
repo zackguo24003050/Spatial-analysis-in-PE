@@ -141,7 +141,7 @@ these scores localized to trophoblast or endothelial compartments.
 The repository contains two related but distinct forms of comparison:
 
 - **Donor-level summaries** are calculated from the six independently inferred
-  SpatialCellChat objects and then averaged within condition.
+  SpatialCellChat objects.
 - **Pooled condition objects** retain donor identity through the `samples`
   field but infer one communication network for all control cells and one for
   all disease cells. RankNet, centrality, and several differential network plots
