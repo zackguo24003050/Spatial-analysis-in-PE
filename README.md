@@ -159,7 +159,7 @@ analysis and ligand-receptor inference in Xenium data from the maternal-fetal
 interface. The work progressed from an initial one-control, one-disease
 comparison to a six-donor SpatialCellChat analysis.
 
-Across the exploratory analyses, NOTCH, NCAM, CLEA11A, and inflammatory signaling
+Across the exploratory analyses, NOTCH, NCAM, CLEA11A, VEGF, and inflammatory signaling
 emerged as candidates for follow-up. The evidence remains preliminary, but it
 provides a focused set of hypotheses and a reusable computational framework for
 the group's planned expanded study.
