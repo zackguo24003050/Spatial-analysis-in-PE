@@ -219,15 +219,18 @@ expressing each gene; color shows scaled average expression.
 
 ![Control and disease cell-identity marker checks for eEVT, Endothelial and EVT](figures/cell-identity-check.png)
 
-I then checked the expression of selected ligand and receptor genes underlying
-the candidate contact and secreted pathways. These dot plots show whether the
-genes are detected in the relevant cell populations; they support
-interpretation of the inferred networks but do not independently establish
-physical communication.
+For the final six-donor analysis, I also checked selected ligand and receptor
+genes behind the candidate contact and secreted pathways. The control panel
+combines FVB and FVQ; the disease panel combines FAM, FCM, FEP, and FVS. The
+expected cell-type expression patterns are broadly present, with no obvious
+identity or expression anomaly that would invalidate these candidates. These
+are cohort-level gene-expression sanity checks, not the earlier one-control
+versus one-disease comparison, and they do not independently demonstrate
+physical communication or donor-level significance.
 
-![Selected ligand and receptor gene expression in control cells](figures/key-lr-control.png)
+![Selected ligand and receptor gene expression across the two control donors](figures/key-lr-control.png)
 
-![Selected ligand and receptor gene expression in disease cells](figures/key-lr-disease.png)
+![Selected ligand and receptor gene expression across the four disease donors](figures/key-lr-disease.png)
 
 ## Interpretation of the Multisample Comparison
 
