@@ -209,25 +209,26 @@ outgoing, incoming, and merged inferred NCAM scores for individual cells. These
 maps help locate candidate signaling within a donor and do not directly measure
 ligand-receptor binding.*
 
-### 06. Quality and candidate-gene checks
+### 06. Six-donor quality checks
 
-Before interpreting pathway differences, I checked eEVT, Endothelial, and EVT
-annotations against marker expression in the six-donor Xenium object. The
-check is documented in the analysis notebook; only the key LR gene checks are
-shown here.
+The first figure checks the identities assigned after Xenium cell segmentation
+and annotation. Marker expression for eEVT, Endothelial, and EVT is shown for
+the pooled control donors (FVB and FVQ) and disease donors (FAM, FCM, FEP, and
+FVS). The patterns are broadly consistent with the assigned cell types, with
+no obvious identity mismatch. This is an annotation sanity check, not a direct
+assessment of segmentation boundaries.
 
-For the final six-donor analysis, I also checked selected ligand and receptor
-genes behind the candidate contact and secreted pathways. The control panel
-combines FVB and FVQ; the disease panel combines FAM, FCM, FEP, and FVS. The
-expected cell-type expression patterns are broadly present, with no obvious
-identity or expression anomaly that would invalidate these candidates. These
-are cohort-level gene-expression sanity checks, not the earlier one-control
-versus one-disease comparison, and they do not independently demonstrate
-physical communication or donor-level significance.
+![Six-donor cell-identity check, with pooled control and disease panels](figures/cell-identity-check.png)
 
-![Selected ligand and receptor gene expression across the two control donors](figures/key-lr-control.png)
+The second figure checks selected genes behind the candidate contact and
+secreted ligand-receptor pathways in those same six donors. Dot size represents
+the proportion of cells expressing each gene, and color represents scaled
+average expression. The relevant genes are detected in the expected cell-type
+compartments. This supports interpretation of the inferred pathways but does
+not independently establish physical communication or donor-level
+significance.
 
-![Selected ligand and receptor gene expression across the four disease donors](figures/key-lr-disease.png)
+![Six-donor key ligand-receptor gene check, with pooled control and disease panels](figures/key-lr-check.png)
 
 ## Interpretation of the Multisample Comparison
 
@@ -287,8 +288,8 @@ the group's planned expanded study.
 |   +-- six-donor-cellchat-ranknet.png
 |   +-- six-donor-cellchat-patterns.png
 |   +-- fvb-ncam-cell-map.png
-|   +-- key-lr-control.png
-|   +-- key-lr-disease.png
+|   +-- cell-identity-check.png
+|   +-- key-lr-check.png
 +-- README.md
 ```
 
