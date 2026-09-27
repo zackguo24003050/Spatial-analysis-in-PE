@@ -81,7 +81,7 @@ The original data are not intended to be shown before formal result is published
 compares endothelial extravillous trophoblasts (eEVTs) and maternal endothelial
 cells in one control donor (FVB) and one PE donor (FAM).
 
-**Nearest-neighbor proportions (NEP).** Within each donor and tissue region
+**Nearest-neighbor preference (NEP).** Within each donor and tissue region
 (decidua or muscle), I used cell-centroid coordinates to find the *n* nearest
 other cells for every eEVT and endothelial cell. I counted directed pairs from
 each query cell type to each neighbor cell type, then divided by all neighbor
