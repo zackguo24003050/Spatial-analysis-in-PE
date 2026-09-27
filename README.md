@@ -197,14 +197,45 @@ I next examined independently inferred donor objects from
 to check how candidate pathways varied between samples. After this donor-level
 review, I mapped selected pathway scores for **individual cells**. This returns
 the inferred signal to its location in the tissue instead of ending at a
-cell-type average. The example below shows NCAM signaling in control donor FVB.
+cell-type average. NCAM provides an example across all six independent donors.
+Each map shows cell identity and location on the left, followed by outgoing,
+incoming, and merged inferred NCAM scores for individual cells.
 
-![Spatial map of FVB cell labels and individual-cell outgoing, incoming and merged NCAM pathway scores](figures/fvb-ncam-cell-map.png)
+#### Control donors
 
-*The left panel shows cell identity and location; the next three panels map
-outgoing, incoming, and merged inferred NCAM scores for individual cells. These
-maps help locate candidate signaling within a donor and do not directly measure
-ligand-receptor binding.*
+| FVB |
+|:---|
+| <img src="figures/fvb-ncam-cell-map.png" alt="FVB cell identities and individual-cell NCAM pathway scores" border="1"> |
+
+| FVQ |
+|:---|
+| <img src="figures/fvq-ncam-cell-map.png" alt="FVQ cell identities and individual-cell NCAM pathway scores" border="1"> |
+
+---
+
+#### Disease donors
+
+| FAM |
+|:---|
+| <img src="figures/fam-ncam-cell-map.png" alt="FAM cell identities and individual-cell NCAM pathway scores" border="1"> |
+
+| FCM |
+|:---|
+| <img src="figures/fcm-ncam-cell-map.png" alt="FCM cell identities and individual-cell NCAM pathway scores" border="1"> |
+
+| FEP |
+|:---|
+| <img src="figures/fep-ncam-cell-map.png" alt="FEP cell identities and individual-cell NCAM pathway scores" border="1"> |
+
+| FVS |
+|:---|
+| <img src="figures/fvs-ncam-cell-map.png" alt="FVS cell identities and individual-cell NCAM pathway scores" border="1"> |
+
+*In the two controls, NCAM-scored cells appear more concentrated around regions
+rich in eEVT and some EVT. In disease, they appear more dispersed across
+the tissue rather than forming the same localized pattern. This is a visual,
+donor-level observation: tissue shapes and score color scales differ between
+donors, and the maps do not directly measure ligand-receptor binding.*
 
 ### 06. Six-donor quality checks
 
@@ -285,6 +316,11 @@ the group's planned expanded study.
 |   +-- six-donor-cellchat-ranknet.png
 |   +-- six-donor-cellchat-patterns.png
 |   +-- fvb-ncam-cell-map.png
+|   +-- fvq-ncam-cell-map.png
+|   +-- fam-ncam-cell-map.png
+|   +-- fcm-ncam-cell-map.png
+|   +-- fep-ncam-cell-map.png
+|   +-- fvs-ncam-cell-map.png
 |   +-- cell-identity-check.png
 |   +-- key-lr-check.png
 +-- README.md
