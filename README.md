@@ -8,8 +8,8 @@ The project began with an initial comparison of one control and one disease
 sample, and then expanded to a six-donor dataset containing two controls and
 four PE samples. The final single-donor and multisample SpatialCellChat
 calculations were run as R scripts
-on the Myriad high-performance computing cluster. The R Markdown files contain
-the exploratory analyses, downstream comparisons, figures, and interpretation.
+on the Myriad computing cluster. The R Markdown files contain
+detailed script and interpretation.
 
 **Supervisor:** Yara Elana Sanchez Corrales<br>
 **Principal investigator:** Sergi Castellano Hereza<br>
@@ -157,22 +157,16 @@ condition-level differences.
 This pilot project established an end-to-end workflow for spatial neighborhood
 analysis and ligand-receptor inference in Xenium data from the maternal-fetal
 interface. The work progressed from an initial one-control, one-disease
-comparison to a six-donor SpatialCellChat analysis run on a high-performance
-computing cluster.
+comparison to a six-donor SpatialCellChat analysis.
 
-Across the exploratory analyses, NOTCH, NCAM, VEGF, and inflammatory signaling
+Across the exploratory analyses, NOTCH, NCAM, CLEA11A, and inflammatory signaling
 emerged as candidates for follow-up. The evidence remains preliminary, but it
 provides a focused set of hypotheses and a reusable computational framework for
 the group's planned expanded study.
 
 ## Limitations and Next Steps
 
-- The cohort contains only two control and four disease donors and is not
-  balanced between conditions.
-- The original nearest-neighbor and LIANA comparisons used one donor per
-  condition, so cell-level tests cannot replace donor-level replication.
-- Many comparative SpatialCellChat figures use pooled condition objects and
-  should be interpreted as exploratory network summaries.
+- The cohort contains only two control and four disease donors.
 - A targeted 479-gene panel limits the number of ligand-receptor pairs that can
   be detected.
 - Current cell-type annotations remain incomplete and may combine biologically
@@ -207,7 +201,7 @@ the group's planned expanded study.
 
 The analysis is written in R. Packages used across the workflows include:
 
-- Seurat and SeuratObject
+- Seurat
 - SpatialCellChat and CellChat
 - LIANA
 - RANN and coziR
